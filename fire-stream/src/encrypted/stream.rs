@@ -153,6 +153,9 @@ where
 		}).await
 	}
 
+	async fn shutdown(&mut self) -> Result<()> {
+		self.stream.shutdown().await.map_err(Into::into)
+	}
 }
 
 bg_stream!(

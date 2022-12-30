@@ -7,11 +7,10 @@ edition = "2021"
 json = ["serde", "serde_json"]
 fs = ["tokio/fs"]
 encrypted = ["crypto"]
-# enable the basic implementor
+# enable the basic implementor (deprecated)
 basic = []
 
 [dependencies]
-# bytes = "0.5"
 crypto = { package = "fire-crypto", version = "0.3.1", features = ["cipher", "signature"], optional = true }
 log-to-stdout = { package = "fire-log-to-stdout", version = "0.1" }
 bytes = { package = "simple-bytes", version = "0.2.11" }

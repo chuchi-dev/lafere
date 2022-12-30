@@ -1,4 +1,3 @@
-
 use crate::Result;
 use crate::plain;
 use crate::handler::{
@@ -52,7 +51,6 @@ pub struct Connection<P> {
 }
 
 impl<P> Connection<P> {
-
 	pub fn new<S>(
 		byte_stream: S,
 		cfg: Config,
@@ -119,5 +117,4 @@ impl<P> Connection<P> {
 	pub async fn close(self) -> Result<()> {
 		self.task.close().await
 	}
-
 }

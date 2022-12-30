@@ -1,4 +1,3 @@
-
 use std::time::Duration;
 
 use fire_stream_api::{
@@ -14,7 +13,6 @@ type Server = ApiServer<api::Action, EncryptedBytes, TcpListener, Keypair>;
 type Client = ApiClient<api::Action, EncryptedBytes>;
 
 mod api {
-
 	use std::fmt;
 
 	use serde::{Serialize, Deserialize};
@@ -33,7 +31,6 @@ mod api {
 	}
 
 	impl message::Action for Action {
-
 		fn empty() -> Self {
 			Self::Unknown
 		}
@@ -54,7 +51,6 @@ mod api {
 				Self::Act2 => 2
 			}
 		}
-
 	}
 
 	#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,7 +65,6 @@ mod api {
 	}
 
 	impl ApiError for Error {
-
 		fn connection_closed() -> Self {
 			Self::ConnectionClosed
 		}
@@ -93,7 +88,6 @@ mod api {
 		fn other<E: ErrorTrait>(e: E) -> Self {
 			Self::Other(e.to_string())
 		}
-
 	}
 
 	impl fmt::Display for Error {
@@ -131,11 +125,9 @@ mod api {
 		type Error = Error;
 		const ACTION: Action = Action::Act2;
 	}
-
 }
 
 mod handlers {
-
 	use crate::api::*;
 	use crate::Server;
 
@@ -170,12 +162,10 @@ mod handlers {
 		server.register_request(act_1);
 		server.register_request(act_2);
 	}
-
 }
 
 #[tokio::test]
 async fn main() {
-
 	let listener = TcpListener::bind(("127.0.0.1", 0)).await
 		.expect("could not create listener");
 	let addr = listener.local_addr().unwrap();
@@ -213,5 +203,4 @@ async fn main() {
 	assert_eq!(r.numbers, 5);
 
 	client.close().await;
-
 }

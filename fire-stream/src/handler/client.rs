@@ -108,15 +108,12 @@ where
 	}
 
 	pub async fn to_send(&mut self) -> Option<P> {
-
 		if self.inner.is_empty() {
 			return None
 		}
 
 		let (packet, rem) = poll_fn(|ctx| {
-
 			for (id, resp) in &mut self.inner {
-
 				match resp.poll_recv(ctx) {
 					Poll::Pending => {},
 					Poll::Ready(Some(mut packet)) => {
@@ -138,7 +135,6 @@ where
 						return Poll::Ready((p, Some(*id)))
 					}
 				}
-
 			}
 
 			Poll::Pending
@@ -304,7 +300,6 @@ where
 	/// Todo: comment still necessary?
 	/// if close=true is once set this cannot be reversed
 	pub async fn to_send(&mut self) -> Option<P> {
-
 		tokio::select!{
 			Some(packet) = self.waiting_on_client.to_send() => Some(packet),
 			Some(req) = self.msg_from_client.recv() => {

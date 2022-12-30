@@ -1,4 +1,3 @@
-
 use crate::message::{Action, Message};
 use crate::util::PinnedFuture;
 
@@ -19,6 +18,7 @@ use std::sync::Mutex;
 
 #[cfg(feature = "encrypted")]
 use crypto::signature::Keypair;
+
 
 pub struct Data {
 	inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>
@@ -542,7 +542,7 @@ macro_rules! request_handler {
 		) $($tt:tt)*
 	) => (
 		$crate::request_handler!(
-			async fn<$($gen)?> $name<$a, $b, $d>($req: $req_ty, ) $($tt)*
+			async fn<$($gen, $gen2)?> $name<$a, $b, $d>($req: $req_ty, ) $($tt)*
 		);
 	);
 	// final handler
@@ -581,7 +581,6 @@ macro_rules! request_handler {
 
 #[cfg(test)]
 mod tests {
-
 	use crate::derive_serde_message;
 	use crate::request;
 	use crate::message;

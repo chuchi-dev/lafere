@@ -1,4 +1,3 @@
-
 use crate::client::{Connection as Client, Config as ClientConfig, ReconStrat};
 use crate::server::{Connection as Server, Config as ServerConfig};
 use crate::timeout::TimeoutReader;
@@ -211,6 +210,9 @@ where
 		self.builder.read_body(&mut self.stream, |_| Ok(())).await
 	}
 
+	async fn shutdown(&mut self) -> Result<()> {
+		self.stream.shutdown().await.map_err(Into::into)
+	}
 }
 
 macro_rules! bg_stream {
@@ -234,7 +236,9 @@ macro_rules! bg_stream {
 				0..=10 => 1,
 				_ => 5
 			};
-			let mut interval = interval(stream.timeout() - Duration::from_secs(diff));
+			let mut interval = interval(
+				stream.timeout() - Duration::from_secs(diff)
+			);
 			interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
 			loop {
@@ -254,6 +258,7 @@ macro_rules! bg_stream {
 						}
 					},
 					Some(packet) = handler.to_send() => {
+						eprintln!("packet to send");
 						// Todo make this not block until everything is sent
 						// this can stop receiving
 						stream.send(packet).await?;
@@ -262,6 +267,7 @@ macro_rules! bg_stream {
 						stream.send(handler.ping_packet()).await?;
 					},
 					_ = &mut close, if !should_close => {
+						eprintln!("received close signal");
 						should_close = true;
 						let packet = handler.close();
 						close_packet = Some(packet);
@@ -274,6 +280,9 @@ macro_rules! bg_stream {
 					else => {
 						if let Some(packet) = close_packet.take() {
 							let _ = stream.send(packet).await;
+						}
+						if let Err(e) = stream.shutdown().await {
+							eprintln!("error shutting down {:?}", e);
 						}
 						return Ok(())
 					}
@@ -291,83 +300,9 @@ bg_stream!(
 	server_bg_stream, server::Handler<P, PlainBytes>, PlainBytes, ServerConfig
 );
 
-/*
-let r = $fn(
-			stream,
-			&mut bg_handler,
-			&mut cfg_rx,
-			&mut rx_close
-		).await;
-
-		if let Err(e) = &r {
-			eprintln!("client_bg_stream closed with error {:?}", e);
-		}
-
-		let mut recon = match recon_strat {
-			Some(r) => r,
-			None => return r
-		};
-
-		if let Ok(o) = r {
-			return Ok(o)
-		}
-
-		// close all started requests
-		bg_handler.close_all_started();
-
-		loop {
-
-			let mut err_counter = 0;
-
-			// connect
-			let byte_stream = loop {
-
-				let stream = (recon.inner)(err_counter).await;
-				match stream {
-					Ok(s) => break s,
-					Err(e) => {
-						eprintln!(
-							"reconnect failed attempt {} {:?}",
-							err_counter,
-							e
-						);
-						err_counter += 1;
-					}
-				}
-
-			};
-
-			let cfg = cfg_rx.newest();
-			let stream = PacketStream::new(
-				byte_stream,
-				cfg.timeout,
-				cfg.body_limit
-			);
-			let r = client_bg_stream(
-				stream,
-				&mut bg_handler,
-				&mut cfg_rx,
-				&mut rx_close
-			).await;
-
-			match r {
-				Ok(o) => return Ok(o),
-				Err(e) => {
-					eprintln!("client_bg_stream closed with error {:?}", e)
-				}
-			}
-
-			// close all started requests
-			bg_handler.close_all_started();
-		}
-*/
-		
-
-
 
 #[cfg(test)]
 mod tests {
-
 	use super::*;
 	use crate::packet::test::{TestPacket};
 	use crate::handler::Message;
@@ -376,27 +311,20 @@ mod tests {
 	use tokio::net::{TcpStream, TcpListener};
 	use tokio::time::{sleep, Duration};
 
+	/// create two tcp stream which communicate with each other
 	async fn tcp_streams() -> (TcpStream, TcpStream) {
-
 		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-
 		let addr = listener.local_addr().unwrap();
 
 		let connect = TcpStream::connect(addr);
-
 		let accept = listener.accept();
-
 		let (connect, accept) = tokio::join!(connect, accept);
 
-		(
-			connect.unwrap(),
-			accept.unwrap().0
-		)
+		(connect.unwrap(), accept.unwrap().0)
 	}
 
 	#[tokio::test]
 	async fn test_plain_stream() {
-
 		let timeout = Duration::from_secs(1);
 
 		let (alice, bob) = tcp_streams().await;
@@ -407,7 +335,6 @@ mod tests {
 		}, None);
 
 		let bob_task = tokio::spawn(async move {
-
 			let mut bob: Server<TestPacket<_>> = server(bob, ServerConfig {
 				timeout,
 				body_limit: 200

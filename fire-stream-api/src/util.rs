@@ -1,4 +1,3 @@
-
 use std::pin::Pin;
 use std::future::Future;
 use std::task::{Poll, Context};
@@ -87,12 +86,12 @@ macro_rules! action {
 		}
 	);
 	($(#[$attr:meta])* pub enum $($toks:tt)*) => (
-		$crate::action!( IMPL, $(#[$attr])* (pub) $($toks)* );
+		$crate::action!(IMPL, $(#[$attr])* (pub) $($toks)*);
 	);
 	($(#[$attr:meta])* pub ($($vis:tt)+) enum $($toks:tt)*) => (
-		$crate::action!( IMPL, $(#[$attr])* (pub ($($vis)+)) $($toks)* );
+		$crate::action!(IMPL, $(#[$attr])* (pub ($($vis)+)) $($toks)*);
 	);
 	($(#[$attr:meta])* enum $($toks:tt)*) => (
-		$crate::action!( IMPL, $(#[$attr])* () $($toks)* );
+		$crate::action!(IMPL, $(#[$attr])* () $($toks)*);
 	)
 }

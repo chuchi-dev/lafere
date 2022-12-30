@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+  rust_min: 1.58.0
+
+jobs:
+  build_and_test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.rust_min }}
+          override: true
+      - name: Build
+        run: cargo build
+      - name: Run tests
+        run: cargo test
+      - name: Build all features
+        run: cargo build --all-features
+      - name: Run tests with all features
+        run: cargo test --all-features

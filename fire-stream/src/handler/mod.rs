@@ -1,4 +1,3 @@
-
 pub(crate) mod client;
 pub(crate) mod server;
 
@@ -24,7 +23,6 @@ pub(crate) struct TaskHandle {
 }
 
 impl TaskHandle {
-
 	/// Wait until the connection has nothing more todo which will then close
 	/// the connection.
 	pub async fn wait(self) -> Result<()> {
@@ -44,7 +42,6 @@ impl TaskHandle {
 	pub fn abort(self) {
 		self.task.abort();
 	}
-
 }
 
 /// A stream of packets which is inside of a connection.
@@ -80,7 +77,6 @@ pub struct StreamSender<P> {
 }
 
 impl<P> StreamSender<P> {
-
 	pub(crate) fn new(inner: mpsc::Sender<P>) -> Self {
 		Self { inner }
 	}
@@ -91,12 +87,10 @@ impl<P> StreamSender<P> {
 		self.inner.send(packet).await
 			.map_err(|_| StreamClosed)
 	}
-
 	// pub fn try_send(&self, packet: P) -> Result<()> {
 	// 	self.inner.try_send(packet)
 	// 		.map_err(|_| StreamClosed)
 	// }
-
 }
 
 
@@ -151,7 +145,6 @@ pub struct Configurator<C> {
 }
 
 impl<C> Configurator<C> {
-
 	pub(crate) fn new(inner: watch::Sender<C>) -> Self {
 		Self { inner }
 	}
@@ -167,5 +160,4 @@ impl<C> Configurator<C> {
 	where C: Clone {
 		self.inner.newest()
 	}
-
 }

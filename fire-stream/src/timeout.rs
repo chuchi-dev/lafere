@@ -1,4 +1,3 @@
-
 // reference: https://docs.rs/tokio-io-timeout/0.4.0/src/tokio_io_timeout/lib.rs.html
 
 use std::pin::Pin;
@@ -20,7 +19,6 @@ pub struct TimeoutReader<S> {
 
 impl<S> TimeoutReader<S>
 where S: AsyncRead {
-
 	pub fn new(stream: S, timeout: Duration) -> Self {
 		Self {
 			stream,
@@ -60,12 +58,13 @@ where S: AsyncRead {
 	pub fn inner_mut(&mut self) -> &mut S {
 		&mut self.stream
 	}
-
 }
 
 impl TimeoutReader<TcpStream> {
 	#[allow(dead_code)]
-	pub fn split<'a>(&'a mut self) -> (TimeoutReader<tcp::ReadHalf<'a>>, tcp::WriteHalf<'a>) {
+	pub fn split<'a>(
+		&'a mut self
+	) -> (TimeoutReader<tcp::ReadHalf<'a>>, tcp::WriteHalf<'a>) {
 		let (read, write) = self.stream.split();
 		(TimeoutReader::new(read, self.timeout), write)
 	}
@@ -73,7 +72,6 @@ impl TimeoutReader<TcpStream> {
 
 impl<S> AsyncRead for TimeoutReader<S>
 where S: AsyncRead + Unpin {
-
 	fn poll_read(
 		mut self: Pin<&mut Self>,
 		cx: &mut Context,
@@ -90,12 +88,10 @@ where S: AsyncRead + Unpin {
 
 		r
 	}
-
 }
 
 impl<S> AsyncWrite for TimeoutReader<S>
 where S: AsyncWrite + Unpin {
-
 	#[inline]
 	fn poll_write(
 		mut self: Pin<&mut Self>,
@@ -134,7 +130,6 @@ where S: AsyncWrite + Unpin {
 	fn is_write_vectored(&self) -> bool {
 		self.stream.is_write_vectored()
 	}
-
 }
 
 
