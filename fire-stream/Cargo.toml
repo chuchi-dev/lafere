@@ -1,0 +1,23 @@
+[package]
+name = "fire-stream"
+version = "0.2.5"
+edition = "2021"
+
+[features]
+json = ["serde", "serde_json"]
+fs = ["tokio/fs"]
+encrypted = ["crypto"]
+# enable the basic implementor
+basic = []
+
+[dependencies]
+# bytes = "0.5"
+crypto = { package = "fire-crypto", version = "0.3.1", features = ["cipher", "signature"], optional = true }
+log-to-stdout = { package = "fire-log-to-stdout", version = "0.1" }
+bytes = { package = "simple-bytes", version = "0.2.11" }
+tokio = { version = "1.0", features = ["net", "io-util", "rt", "time", "sync", "macros"] }
+serde = { version = "1.0", optional = true }
+serde_json = { version = "1.0", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["net", "io-util", "rt-multi-thread", "time", "macros", "sync"] }

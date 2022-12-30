@@ -1,0 +1,25 @@
+[package]
+name = "fire-stream-api"
+version = "0.1.1"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[test]]
+name = "complete"
+required-features = ["encrypted"]
+
+[features]
+encrypted = ["crypto", "stream/encrypted"]
+
+[dependencies]
+stream = { package = "fire-stream", version = "0.2", path = "./../fire-stream", features = ["json"] }
+crypto = { package = "fire-crypto", version = "0.3", features = ["cipher", "signature"], optional = true }
+bytes = { package = "simple-bytes", version = "0.2.6" }
+tokio = { version = "1.0", features = ["net", "io-util", "time", "sync"] }
+serde = { version = "1.0" }
+serde_json = { version = "1.0" }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["net", "io-util", "rt-multi-thread", "time", "macros", "sync"] }
+serde = { version = "1.0", features = ["derive"] }
