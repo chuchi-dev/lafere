@@ -238,8 +238,6 @@ where
 		let id = packet.header().id();
 		let kind = flags.kind();
 
-		// println!("received {:?} {:?}", kind, packet);
-
 		match kind {
 			Kind::Response => {
 				match self.waiting_on_server.remove(&id) {

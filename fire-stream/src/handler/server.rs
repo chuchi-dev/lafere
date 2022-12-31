@@ -220,8 +220,6 @@ where
 		let id = packet.header().id();
 		let kind = flags.kind();
 
-		// println!("received {:?} {:?}", kind, packet);
-
 		// todo maybe check that the id is not used
 		// Err(PacketError::Header("Handler not found".into()).into())
 

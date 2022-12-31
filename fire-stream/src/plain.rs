@@ -258,7 +258,6 @@ macro_rules! bg_stream {
 						}
 					},
 					Some(packet) = handler.to_send() => {
-						eprintln!("packet to send");
 						// Todo make this not block until everything is sent
 						// this can stop receiving
 						stream.send(packet).await?;
@@ -267,7 +266,6 @@ macro_rules! bg_stream {
 						stream.send(handler.ping_packet()).await?;
 					},
 					_ = &mut close, if !should_close => {
-						eprintln!("received close signal");
 						should_close = true;
 						let packet = handler.close();
 						close_packet = Some(packet);
