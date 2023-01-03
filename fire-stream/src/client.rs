@@ -65,6 +65,7 @@ impl<P> Connection<P> {
 	}
 
 	#[cfg(feature = "encrypted")]
+	#[cfg_attr(docsrs, doc(cfg(feature = "encrypted")))]
 	pub fn new_encrypted<S>(
 		byte_stream: S,
 		cfg: Config,

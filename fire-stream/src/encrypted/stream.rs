@@ -4,7 +4,6 @@ use crate::timeout::TimeoutReader;
 use crate::packet::{Packet, EncryptedBytes};
 use crate::packet::builder::PacketReceiver;
 use crate::error::StreamError;
-use crate::log_traits::*;
 use crate::traits::ByteStream;
 use crate::handler::{client, server, TaskHandle, SendBack};
 use crate::client::{Connection as Client, Config as ClientConfig, ReconStrat};
@@ -69,8 +68,18 @@ where
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
 		let stream = PacketStream::server(stream, sign, cfg_rx.newest()).await?;
-		server_bg_stream(stream, &mut bg_handler, &mut cfg_rx, &mut rx_close).await
-			.error("bg_stream closed with error")
+		let r = server_bg_stream(
+			stream,
+			&mut bg_handler,
+			&mut cfg_rx,
+			&mut rx_close
+		).await;
+
+		if let Err(e) = &r {
+			eprintln!("bg_stream closed with error {:?}", e);
+		}
+
+		r
 	});
 
 	let task = TaskHandle { close: tx_close, task };

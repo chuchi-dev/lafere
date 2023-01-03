@@ -1,6 +1,7 @@
 //!
-//! copy of: <https://doc.rust-lang.org/beta/src/core/future/poll_fn.rs.html>
-//! TODO: remove when <https://github.com/rust-lang/rust/issues/72302> get's stable
+//! copy from the std library
+//!
+//! TODO: once our msrv get's increased to 1.64
 
 use std::fmt;
 use std::future::Future;
@@ -26,7 +27,7 @@ pub struct PollFn<F> {
 	f: F,
 }
 
-impl<F> Unpin for PollFn<F> {}
+impl<F: Unpin> Unpin for PollFn<F> {}
 
 impl<F> fmt::Debug for PollFn<F> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -40,8 +41,9 @@ where
 {
 	type Output = T;
 
-	fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
-		(&mut self.f)(cx)
+	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
+		// SAFETY: We are not moving out of the pinned field.
+		(unsafe { &mut self.get_unchecked_mut().f })(cx)
 	}
 }
 

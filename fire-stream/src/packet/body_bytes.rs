@@ -1,4 +1,3 @@
-
 #[cfg(feature = "json")]
 use super::Result;
 
@@ -8,7 +7,9 @@ use std::result::Result as StdResult;
 #[cfg(feature = "fs")]
 use std::path::Path;
 
-use bytes::{Offset, Cursor, Bytes, BytesRead, BytesWrite, BytesSeek};
+use bytes::{
+	Offset, Cursor, Bytes, BytesRead, BytesReadRef, BytesWrite, BytesSeek
+};
 
 #[cfg(feature = "json")]
 use serde::{Serialize, de::DeserializeOwned};
@@ -24,7 +25,6 @@ pub struct BodyBytes<'a> {
 }
 
 impl<'a> BodyBytes<'a> {
-
 	/// Creates a new body bytes.
 	pub fn new(slice: &'a [u8]) -> Self {
 		Self { inner: slice.into() }
@@ -41,6 +41,7 @@ impl<'a> BodyBytes<'a> {
 	}
 
 	#[cfg(feature = "json")]
+	#[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 	pub fn deserialize<D>(&self) -> Result<D>
 	where D: DeserializeOwned {
 		serde_json::from_slice(self.inner.as_slice())
@@ -48,16 +49,15 @@ impl<'a> BodyBytes<'a> {
 	}
 
 	#[cfg(feature = "fs")]
+	#[cfg_attr(docsrs, doc(cfg(feature = "fs")))]
 	pub async fn to_file<P>(&mut self, path: P) -> Result<()>
 	where P: AsRef<Path> {
 		fs::write(path, self.as_slice()).await
 			.map_err(|e| e.into())
 	}
-	
 }
 
 impl BytesRead for BodyBytes<'_> {
-
 	// returns the full slice
 	#[inline]
 	fn as_slice(&self) -> &[u8] {
@@ -78,7 +78,31 @@ impl BytesRead for BodyBytes<'_> {
 	fn peek(&self, len: usize) -> Option<&[u8]> {
 		self.inner.peek(len)
 	}
+}
 
+impl<'a> BytesReadRef<'a> for BodyBytes<'a> {
+	#[inline]
+	fn as_slice_ref(&self) -> &'a [u8] {
+		self.inner.as_slice_ref()
+	}
+
+	#[inline]
+	fn remaining_ref(&self) -> &'a [u8] {
+		self.inner.remaining_ref()
+	}
+
+	#[inline]
+	fn try_read_ref(
+		&mut self,
+		len: usize
+	) -> StdResult<&'a [u8], bytes::ReadError> {
+		self.inner.try_read_ref(len)
+	}
+
+	#[inline]
+	fn peek_ref(&self, len: usize) -> Option<&'a [u8]> {
+		self.inner.peek_ref(len)
+	}
 }
 
 impl BytesSeek for BodyBytes<'_> {
@@ -97,7 +121,6 @@ pub struct BodyBytesMut<'a> {
 }
 
 impl<'a> BodyBytesMut<'a> {
-
 	/// Creates a new body bytes.
 	/// 
 	/// This should only be used if you implement your own MessageBytes.
@@ -168,7 +191,6 @@ impl<'a> BodyBytesMut<'a> {
 }
 
 impl BytesWrite for BodyBytesMut<'_> {
-
 	fn as_mut(&mut self) -> &mut [u8] {
 		self.inner.as_mut()
 	}
@@ -187,7 +209,6 @@ impl BytesWrite for BodyBytesMut<'_> {
 	) -> StdResult<(), bytes::WriteError> {
 		self.inner.try_write(slice)
 	}
-
 }
 
 impl BytesSeek for BodyBytesMut<'_> {
@@ -202,7 +223,6 @@ impl BytesSeek for BodyBytesMut<'_> {
 
 
 impl io::Write for BodyBytesMut<'_> {
-
 	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		self.inner.write(buf);
 		Ok(buf.len())
@@ -211,5 +231,4 @@ impl io::Write for BodyBytesMut<'_> {
 	fn flush(&mut self) -> io::Result<()> {
 		Ok(())
 	}
-
 }

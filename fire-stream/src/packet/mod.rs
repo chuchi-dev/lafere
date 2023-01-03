@@ -11,6 +11,7 @@ pub use packet::*;
 #[cfg(feature = "encrypted")]
 mod encrypted_bytes;
 #[cfg(feature = "encrypted")]
+#[cfg_attr(docsrs, doc(cfg(feature = "encrypted")))]
 pub use encrypted_bytes::*;
 
 pub(crate) mod builder;
@@ -25,8 +26,10 @@ pub enum PacketError {
 	Header(String),
 	Body(String),
 	#[cfg(feature = "json")]
+	#[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 	Json(serde_json::Error),
 	#[cfg(feature = "fs")]
+	#[cfg_attr(docsrs, doc(cfg(feature = "fs")))]
 	Io(std::io::Error),
 	/// Returns the size that should have been sent
 	BodyLimitReached(usize)
