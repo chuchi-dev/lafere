@@ -1,0 +1,11 @@
+[package]
+name = "fire-protobuf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytes = { package = "simple-bytes", version = "0.2" }
+codegen = { package = "fire-protobuf-codegen", version = "0.1", path = "../fire-protobuf-codegen" }
+
+[dev-dependencies]
+hex-literal = "0.3"
