@@ -1,9 +1,10 @@
-
-use crate::Result;
 use crate::plain;
-use crate::traits::ByteStream;
-use crate::handler::{TaskHandle, server::Receiver, Message, Configurator};
+use crate::error::{TaskError};
+use crate::util::ByteStream;
+use crate::handler::{TaskHandle, server::Receiver, Configurator};
 use crate::packet::{Packet, PlainBytes};
+
+pub use crate::handler::server::Message;
 
 #[cfg(feature = "encrypted")]
 use crate::{encrypted, packet::EncryptedBytes};
@@ -12,14 +13,14 @@ use crypto::signature as sign;
 
 use std::time::Duration;
 
+
 #[derive(Debug, Clone)]
 pub struct Config {
 	pub timeout: Duration,
 	/// if the limit is 0 there is no limit
-	pub body_limit: usize
+	pub body_limit: u32
 }
 
-/// A connection between 
 pub struct Connection<P> {
 	receiver: Receiver<P>,
 	task: TaskHandle
@@ -67,11 +68,11 @@ impl<P> Connection<P> {
 		self.receiver.receive().await
 	}
 
-	pub async fn close(self) -> Result<()> {
+	pub async fn close(self) -> Result<(), TaskError> {
 		self.task.close().await
 	}
 
-	pub async fn wait(self) -> Result<()> {
+	pub async fn wait(self) -> Result<(), TaskError> {
 		self.task.wait().await
 	}
 
@@ -80,5 +81,4 @@ impl<P> Connection<P> {
 	pub(crate) fn abort(self) {
 		self.task.abort()
 	}
-
 }

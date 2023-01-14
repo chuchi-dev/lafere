@@ -1,16 +1,14 @@
-
 use super::{BodyBytes, BodyBytesMut};
 
 use bytes::{Bytes, BytesMut};
 
 
-// type Result<T> = std::result::Result<T, MessageError>;
-
 /// A trait that allows efficient allocation if encryption is
 /// used or not.
 pub trait PacketBytes: std::fmt::Debug {
-
 	/// Creates a new Bytes instance.
+	///
+	/// It must always have header len available and initialized
 	fn new(header_len: usize) -> Self;
 
 	/// Returns the header Bytes.
@@ -22,7 +20,8 @@ pub trait PacketBytes: std::fmt::Debug {
 	/// Returns the full header mutably.
 	/// 
 	/// ## Note
-	/// Use `header_mut` instead.
+	/// This should only be used to fill the buffer from a reader, in any other
+	/// case you should use `header_mut`.
 	fn full_header_mut(&mut self) -> BytesMut<'_>;
 
 	/// Returns the body.
@@ -34,9 +33,9 @@ pub trait PacketBytes: std::fmt::Debug {
 	/// Returns the full body mutably.
 	/// 
 	/// ## Note
-	/// Use `body_mut` instead.
+	/// This should only be used to fill the buffer from a reader, in any other
+	/// case you should use `body_mut`.
 	fn full_body_mut(&mut self) -> BytesMut<'_>;
-
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,24 +78,18 @@ impl PacketBytes for PlainBytes {
 }
 
 impl PlainBytes {
-
 	pub(crate) fn as_slice(&self) -> &[u8] {
 		&*self.bytes
 	}
-
 }
-
-
 
 
 #[cfg(test)]
 pub(super) mod tests {
-
 	use super::*;
 	use bytes::{BytesOwned, BytesRead, BytesWrite};
 
 	pub fn test_gen_msg<B: PacketBytes>() {
-
 		let header = [10u8; 30];
 		let mut bytes = B::new(header.len());
 		bytes.header_mut().write(&header);
@@ -121,12 +114,10 @@ pub(super) mod tests {
 		body.write_u32(20);
 		assert_eq!(bytes.body().as_slice(), body.as_slice());
 		assert_eq!(bytes.body().len(), body.len());
-
 	}
 
 	#[test]
 	fn plain_bytes() {
 		test_gen_msg::<PlainBytes>();
 	}
-
 }

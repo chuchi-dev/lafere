@@ -1,12 +1,9 @@
-
-use super::{
-	SendBack, Message, StreamSender, Stream, ResponseSender, Configurator
+use super::{SendBack, StreamSender, StreamReceiver, Configurator};
+use crate::error::{RequestError, TaskError};
+use crate::util::{watch, poll_fn};
+use crate::packet::{
+	Packet, Kind, Flags, PacketHeader, PacketBytes, PacketError
 };
-use crate::Result;
-use crate::watch;
-use crate::packet::{Packet, Kind, Flags, PacketHeader, PacketBytes, PacketError};
-use crate::poll_fn::poll_fn;
-use crate::StreamError::*;
 use crate::client::Config;
 
 use std::collections::HashMap;
@@ -22,38 +19,37 @@ pub struct Sender<P> {
 }
 
 impl<P> Sender<P> {
-
 	/// Send a request waiting until a response is available.
-	pub async fn request(&self, packet: P) -> Result<P> {
+	pub async fn request(&self, packet: P) -> Result<P, RequestError> {
 		let (tx, rx) = oneshot::channel();
-		self.inner.send(Message::Request(
-			packet,
-			ResponseSender::new(tx)
-		)).await.map_err(|_| ConnectionClosed)?;
+		self.inner.send(Message::Request(packet, tx)).await
+			.map_err(|_| RequestError::ConnectionAlreadyClosed)?;
 
-		rx.await.map_err(|_| RequestDropped)
-	}
-
-	/// Opens a new stream to listen to packets.
-	pub async fn open_stream(&self, packet: P) -> Result<Stream<P>> {
-		let (tx, rx) = mpsc::channel(10);
-		self.inner.send(Message::OpenStream(
-			packet,
-			StreamSender::new(tx)
-		)).await.map_err(|_| ConnectionClosed)?;
-
-		Ok(Stream::new(rx))
+		rx.await.map_err(|_| RequestError::TaskFailed)?
 	}
 
 	/// Create a new stream to send packets.
-	pub async fn create_stream(&self, packet: P) -> Result<StreamSender<P>> {
+	pub async fn request_sender(
+		&self,
+		packet: P
+	) -> Result<StreamSender<P>, RequestError> {
 		let (tx, rx) = mpsc::channel(10);
-		self.inner.send(Message::CreateStream(
-			packet,
-			Stream::new(rx)
-		)).await.map_err(|_| ConnectionClosed)?;
+		self.inner.send(Message::RequestSender(packet, rx)).await
+			.map_err(|_| RequestError::ConnectionAlreadyClosed)?;
 
 		Ok(StreamSender::new(tx))
+	}
+
+	/// Opens a new stream to listen to packets.
+	pub async fn request_receiver(
+		&self,
+		packet: P
+	) -> Result<StreamReceiver<P>, RequestError> {
+		let (tx, rx) = mpsc::channel(10);
+		self.inner.send(Message::RequestReceiver(packet, tx)).await
+			.map_err(|_| RequestError::ConnectionAlreadyClosed)?;
+
+		Ok(StreamReceiver::new(rx))
 	}
 
 	pub fn update_config(&self, cfg: Config) {
@@ -63,7 +59,6 @@ impl<P> Sender<P> {
 	pub fn configurator(&self) -> Configurator<Config> {
 		Configurator::new(self.cfg.clone())
 	}
-
 }
 
 impl<P> Clone for Sender<P> {
@@ -75,9 +70,19 @@ impl<P> Clone for Sender<P> {
 	}
 }
 
+/// A message containing the different kinds of messages.
+#[derive(Debug)]
+pub(crate) enum Message<P> {
+	Request(P, oneshot::Sender<Result<P, RequestError>>),
+	// a request to receive a sender stream
+	RequestSender(P, mpsc::Receiver<P>),
+	// a request to receive a receiving stream
+	RequestReceiver(P, mpsc::Sender<P>)
+}
+
 /// A response that is managed by the handler
 enum Response<P> {
-	Request(oneshot::Sender<P>),
+	Request(oneshot::Sender<Result<P, RequestError>>),
 	// a request to receive a receiving stream
 	Receiver(mpsc::Sender<P>)
 }
@@ -95,7 +100,6 @@ where
 	P: Packet<B>,
 	B: PacketBytes
 {
-
 	fn new() -> Self {
 		Self {
 			inner: HashMap::new(),
@@ -158,7 +162,6 @@ where
 			s.close();
 		}
 	}
-
 }
 
 /// A handler that is responsible for the client.
@@ -233,7 +236,7 @@ where
 	pub(crate) async fn send(
 		&mut self,
 		packet: P
-	) -> Result<SendBack<P>> {
+	) -> Result<SendBack<P>, TaskError> {
 		let flags = packet.header().flags();
 		let id = packet.header().id();
 		let kind = flags.kind();
@@ -243,17 +246,27 @@ where
 				match self.waiting_on_server.remove(&id) {
 					Some(Response::Request(r)) => {
 						// we don't care if the response could be sent or not
-						let _ = r.send(packet);
+						let _ = r.send(Ok(packet));
 						Ok(SendBack::None)
 					},
-					_ => Err(
-						PacketError::Header("Handler not found".into()).into()
-					)
+					_ => Err(TaskError::UnknownId(id))
 				}
 			},
-			Kind::NoResponse => {
-				self.waiting_on_server.remove(&id);
-				Ok(SendBack::None)
+			Kind::NoResponse |
+			Kind::MalformedRequest => {
+				let e = match kind {
+					Kind::NoResponse => RequestError::NoResponse,
+					Kind::MalformedRequest => RequestError::MalformedRequest,
+					_ => unreachable!()
+				};
+
+				match self.waiting_on_server.remove(&id) {
+					Some(Response::Request(r)) => {
+						let _ = r.send(Err(e));
+						Ok(SendBack::None)
+					},
+					_ => Err(TaskError::UnknownId(id))
+				}
 			},
 			Kind::Stream => {
 				match self.waiting_on_server.get_mut(&id) {
@@ -267,9 +280,7 @@ where
 							Ok(SendBack::None)
 						}
 					},
-					Some(_) => Err(
-						PacketError::Header("Handler not found".into()).into()
-					),
+					Some(_) => Err(TaskError::UnknownId(id)),
 					None => {
 						// since the server could send multiple streams
 						// before we can send him a stream closed
@@ -280,23 +291,20 @@ where
 				}
 			},
 			Kind::StreamClosed => {
+				// we might receive multiple StreamClosed because we or the
+				// server where slow, so just ignore the packet
 				let _ = self.waiting_on_server.remove(&id);
 				self.waiting_on_client.close(id);
 				Ok(SendBack::None)
 			},
 			Kind::Close => Ok(SendBack::Close),
 			Kind::Ping => Ok(SendBack::None),
-			k => Err(
-				PacketError::Header(format!("{:?} not supported", k)).into()
-			)
+			k => Err(TaskError::WrongPacketKind(k.to_str()))
 		}
 	}
 
 	/// Returns a packet to send to the server.
 	/// If None is returned there is nothing more to send.
-	/// 
-	/// Todo: comment still necessary?
-	/// if close=true is once set this cannot be reversed
 	pub async fn to_send(&mut self) -> Option<P> {
 		tokio::select!{
 			Some(packet) = self.waiting_on_client.to_send() => Some(packet),
@@ -310,23 +318,23 @@ where
 					Message::Request(packet, sender) => {
 						self.waiting_on_server.insert(
 							id,
-							Response::Request(sender.inner)
+							Response::Request(sender)
 						);
 
 						(Kind::Request, packet)
 					},
-					Message::OpenStream(packet, sender) => {
+					Message::RequestSender(packet, receiver) => {
+						self.waiting_on_client.insert(id, receiver);
+
+						(Kind::RequestSender, packet)
+					},
+					Message::RequestReceiver(packet, sender) => {
 						self.waiting_on_server.insert(
 							id,
-							Response::Receiver(sender.inner)
+							Response::Receiver(sender)
 						);
 
-						(Kind::NewStream, packet)
-					},
-					Message::CreateStream(packet, receiver) => {
-						self.waiting_on_client.insert(id, receiver.inner);
-
-						(Kind::NewSenderStream, packet)
+						(Kind::RequestReceiver, packet)
 					}
 				};
 
@@ -338,6 +346,45 @@ where
 			else => {
 				None
 			}
+		}
+	}
+
+	/// we received a packet which had a malformed body
+	pub(crate) fn packet_error(
+		&mut self,
+		header: P::Header,
+		e: PacketError
+	) -> Result<SendBack<P>, TaskError> {
+		let flags = header.flags();
+		let id = header.id();
+		let kind = flags.kind();
+
+		match kind {
+			Kind::Response => {
+				match self.waiting_on_server.remove(&id) {
+					Some(Response::Request(r)) => {
+						let _ = r.send(Err(RequestError::ResponsePacket(e)));
+						Ok(SendBack::None)
+					},
+					_ => Err(TaskError::UnknownId(id))
+				}
+			},
+			// this should not have a user generated so this should never fail
+			Kind::NoResponse |
+			Kind::MalformedRequest |
+			Kind::Close |
+			Kind::Ping |
+			Kind::StreamClosed => Err(TaskError::Packet(e)),
+			Kind::Stream => {
+				// ignore a stream packet which had an error
+				eprintln!(
+					"failed to parse stream packet {} {:?}",
+					header.id(),
+					e
+				);
+				Ok(SendBack::None)
+			},
+			k => Err(TaskError::WrongPacketKind(k.to_str()))
 		}
 	}
 

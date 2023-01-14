@@ -1,5 +1,4 @@
-
-use crate::traits::ByteStream;
+use super::ByteStream;
 
 use std::io;
 use std::net::{self, SocketAddrV4, SocketAddrV6};
@@ -77,7 +76,7 @@ mod unix {
 
 pub trait ListenerExt: Listener {
 	/// Equivalent to
-	/// async fn accept(&self) -> io::Result<(Self::Stream, SocketAddr)>
+	/// `async fn accept(&self) -> io::Result<(Self::Stream, SocketAddr)>`
 	fn accept<'a>(&'a self) -> Accept<'a, Self>
 	where Self: Sized;
 }

@@ -1,14 +1,13 @@
-
 use super::handshake::{server_handshake, client_handshake};
-use crate::timeout::TimeoutReader;
+use crate::util::{watch, TimeoutReader, ByteStream};
 use crate::packet::{Packet, EncryptedBytes};
-use crate::packet::builder::PacketReceiver;
-use crate::error::StreamError;
-use crate::traits::ByteStream;
+use crate::packet::builder::{PacketReceiver, PacketReceiverError};
+use crate::error::TaskError;
 use crate::handler::{client, server, TaskHandle, SendBack};
 use crate::client::{Connection as Client, Config as ClientConfig, ReconStrat};
 use crate::server::{Connection as Server, Config as ServerConfig};
-use crate::watch;
+
+use std::io;
 
 use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
@@ -17,7 +16,6 @@ use tokio::time::{interval, Duration, MissedTickBehavior};
 use crypto::cipher::Key;
 use crypto::signature as sign;
 
-type Result<T> = std::result::Result<T, StreamError>;
 
 pub fn client<S, P>(
 	stream: S,
@@ -114,7 +112,7 @@ where
 		stream: S,
 		sign: sign::PublicKey,
 		cfg: ClientConfig
-	) -> Result<Self> {
+	) -> Result<Self, TaskError> {
 		let mut stream = TimeoutReader::new(stream, cfg.timeout);
 		let handshake = client_handshake(&sign, &mut stream).await?;
 		Ok(Self {
@@ -129,7 +127,7 @@ where
 		stream: S,
 		sign: sign::Keypair,
 		cfg: ServerConfig
-	) -> Result<Self> {
+	) -> Result<Self, TaskError> {
 		let mut stream = TimeoutReader::new(stream, cfg.timeout);
 		let handshake = server_handshake(&sign, &mut stream).await?;
 		Ok(Self {
@@ -140,17 +138,18 @@ where
 		})
 	}
 
-	async fn send(&mut self, packet: P) -> Result<()> {
+	async fn send(&mut self, packet: P) -> io::Result<()> {
 		let mut bytes = packet.into_bytes();
 		bytes.encrypt(&mut self.send_key);
 		let slice = bytes.as_slice();
 		self.stream.write_all(slice).await?;
 		self.stream.flush().await?;
+
 		Ok(())
 	}
 
 	/// this function is abort safe
-	async fn receive(&mut self) -> Result<P> {
+	async fn receive(&mut self) -> Result<P, PacketReceiverError<P::Header>> {
 		let recv_key = &mut self.recv_key;
 		self.builder.read_header(&mut self.stream, |bytes| {
 			bytes.decrypt_header(recv_key)
@@ -162,8 +161,8 @@ where
 		}).await
 	}
 
-	async fn shutdown(&mut self) -> Result<()> {
-		self.stream.shutdown().await.map_err(Into::into)
+	async fn shutdown(&mut self) -> io::Result<()> {
+		self.stream.shutdown().await
 	}
 }
 
@@ -182,16 +181,14 @@ bg_stream!(
 
 #[cfg(test)]
 mod tests {
-
 	use super::*;
 	use crate::packet::test::{TestPacket};
-	use crate::handler::Message;
+	use crate::server::Message;
 	use crypto::signature::Keypair;
 
 	use tokio::net::{TcpStream, TcpListener};
 
 	async fn tcp_streams() -> (TcpStream, TcpStream) {
-
 		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 
 		let addr = listener.local_addr().unwrap();
@@ -210,7 +207,6 @@ mod tests {
 
 	#[tokio::test]
 	async fn test_encrypted_stream() {
-
 		let timeout = Duration::from_secs(1);
 		let key = Keypair::new();
 		let public_key = key.public().clone();
@@ -245,7 +241,7 @@ mod tests {
 
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::OpenStream(req, stream) => {
+				Message::RequestReceiver(req, stream) => {
 					assert_eq!(req.num1, 5);
 					assert_eq!(req.num2, 6);
 
@@ -261,7 +257,7 @@ mod tests {
 
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::CreateStream(req, mut stream) => {
+				Message::RequestSender(req, mut stream) => {
 					assert_eq!(req.num1, 11);
 					assert_eq!(req.num2, 12);
 
@@ -289,7 +285,7 @@ mod tests {
 
 		// let's create a stream to listen
 		let req = TestPacket::new(5, 6);
-		let mut stream = alice.open_stream(req).await.unwrap();
+		let mut stream = alice.request_receiver(req).await.unwrap();
 
 		let res = stream.receive().await.unwrap();
 		assert_eq!(res.num1, 7);
@@ -302,7 +298,7 @@ mod tests {
 
 		// now request a stream.sender
 		let req = TestPacket::new(11, 12);
-		let stream = alice.create_stream(req).await.unwrap();
+		let stream = alice.request_sender(req).await.unwrap();
 
 		let req = TestPacket::new(13, 14);
 		stream.send(req).await.unwrap();
@@ -316,5 +312,4 @@ mod tests {
 		// wait until bob's task finishes
 		bob_task.await.unwrap();
 	}
-
 }

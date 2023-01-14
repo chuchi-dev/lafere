@@ -1,19 +1,21 @@
 [package]
 name = "fire-stream"
 description = "A more or less simple communication protocol library."
-version = "0.2.8"
+version = "0.3.0"
 authors = ["Sören meier <info@soerenmeier.ch>"]
 repository = "https://github.com/fire-lib/fire-stream"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 rust-version = "1.58"
 
+[[example]]
+name = "request_response"
+test = true
+
 [features]
 json = ["serde", "serde_json"]
 fs = ["tokio/fs"]
 encrypted = ["crypto"]
-# enable the basic implementor (deprecated)
-basic = []
 
 [dependencies]
 crypto = { package = "fire-crypto", version = "0.3.1", features = ["cipher", "signature"], optional = true }

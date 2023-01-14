@@ -1,14 +1,12 @@
-
-use super::{
-	SendBack, Message, Stream, StreamSender, ResponseSender, Configurator
+use super::{SendBack, StreamSender, StreamReceiver, Configurator};
+use crate::error::{ResponseError, TaskError};
+use crate::util::{watch, poll_fn};
+use crate::packet::{
+	Packet, Kind, Flags, PacketHeader, PacketBytes, PacketError
 };
-use crate::Result;
-use crate::watch;
-use crate::packet::{Packet, Kind, Flags, PacketHeader, PacketBytes, PacketError};
-use crate::poll_fn::poll_fn;
 use crate::server::Config;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 use std::future::Future;
 use std::task::Poll;
 use std::marker::PhantomData;
@@ -24,7 +22,6 @@ pub(crate) struct Receiver<P> {
 }
 
 impl<P> Receiver<P> {
-
 	/// Receive a new message from the client
 	pub async fn receive(&mut self) -> Option<Message<P>> {
 		self.inner.recv().await
@@ -37,7 +34,40 @@ impl<P> Receiver<P> {
 	pub fn configurator(&self) -> Configurator<Config> {
 		Configurator::new(self.cfg.clone())
 	}
+}
 
+/// All different kinds of messages.
+#[derive(Debug)]
+pub enum Message<P> {
+	Request(P, ResponseSender<P>),
+	// a request to receive a sender stream
+	RequestSender(P, StreamReceiver<P>),
+	// a request to receive a receiving stream
+	RequestReceiver(P, StreamSender<P>)
+}
+
+/// A sender used to respond to a request.
+#[derive(Debug)]
+pub struct ResponseSender<P> {
+	pub(crate) inner: oneshot::Sender<P>
+}
+
+impl<P> ResponseSender<P> {
+	pub(crate) fn new(inner: oneshot::Sender<P>) -> Self {
+		Self { inner }
+	}
+
+	/// Sends the packet as a response, adding the correct flags.
+	/// 
+	/// If this returns an Error it either means the connection was closed
+	/// or the requestor does not care about the response anymore.
+	pub fn send(
+		self,
+		packet: P
+	) -> Result<(), ResponseError> {
+		self.inner.send(packet)
+			.map_err(|_| ResponseError::ConnectionClosed)
+	}
 }
 
 pub enum Response<P> {
@@ -59,7 +89,6 @@ where
 	P: Packet<B>,
 	B: PacketBytes
 {
-
 	fn new() -> Self {
 		Self {
 			inner: HashMap::new(),
@@ -67,12 +96,21 @@ where
 		}
 	}
 
-	fn insert(&mut self, id: u32, receiver: Response<P>) {
-		self.inner.insert(id, receiver);
+	fn insert(
+		&mut self,
+		id: u32,
+		receiver: Response<P>
+	) -> Result<(), TaskError> {
+		match self.inner.entry(id) {
+			Entry::Occupied(occ) => Err(TaskError::ExistingId(*occ.key())),
+			Entry::Vacant(v) => {
+				v.insert(receiver);
+				Ok(())
+			}
+		}
 	}
 
 	pub async fn to_send(&mut self) -> Option<P> {
-
 		if self.inner.is_empty() {
 			return None
 		}
@@ -155,7 +193,6 @@ where
 			_ => {}
 		}
 	}
-
 }
 
 /// A handler that is responsible for the server.
@@ -215,64 +252,90 @@ where
 	}
 
 	/// Should be called with a packet from the client.
-	pub(crate) async fn send(&mut self, packet: P) -> Result<SendBack<P>> {
+	pub(crate) async fn send(
+		&mut self,
+		packet: P
+	) -> Result<SendBack<P>, TaskError> {
 		let flags = packet.header().flags();
 		let id = packet.header().id();
 		let kind = flags.kind();
 
-		// todo maybe check that the id is not used
-		// Err(PacketError::Header("Handler not found".into()).into())
-
 		match kind {
 			Kind::Request => {
 				let (tx, rx) = oneshot::channel();
-				self.waiting_on_server.insert(id, Response::Request(rx));
-				// todo should return error
-				self.msg_to_server.send(Message::Request(
+
+				self.waiting_on_server.insert(id, Response::Request(rx))?;
+
+				let sr = self.msg_to_server.send(Message::Request(
 					packet,
 					ResponseSender::new(tx)
-				)).await.unwrap();
+				)).await;
 
-				Ok(SendBack::None)
+				match sr {
+					Ok(_) => Ok(SendBack::None),
+					// the server has no interest anymore
+					// Let's close the connection
+					Err(_) => Ok(SendBack::CloseWithPacket)
+				}
 			},
-			Kind::NewStream => {
+			Kind::RequestReceiver => {
 				let (tx, rx) = mpsc::channel(10);	
-				self.waiting_on_server.insert(id, Response::Receiver(rx));
-				// todo should return error
-				self.msg_to_server.send(Message::OpenStream(
+				self.waiting_on_server.insert(id, Response::Receiver(rx))?;
+
+				let sr = self.msg_to_server.send(Message::RequestReceiver(
 					packet,
 					StreamSender::new(tx)
-				)).await.unwrap();
+				)).await;
 
-				Ok(SendBack::None)
+				match sr {
+					Ok(_) => Ok(SendBack::None),
+					// the server has no interest anymore
+					// Let's close the connection
+					Err(_) => Ok(SendBack::CloseWithPacket)
+				}
 			},
-			Kind::NewSenderStream => {
+			Kind::RequestSender => {
 				let (tx, rx) = mpsc::channel(10);
-				self.waiting_on_client.insert(id, tx);
-				// todo should return error
-				self.msg_to_server.send(Message::CreateStream(
-					packet,
-					Stream::new(rx)
-				)).await.unwrap();
 
-				Ok(SendBack::None)
+				match self.waiting_on_client.entry(id) {
+					Entry::Occupied(occ) => {
+						return Err(TaskError::ExistingId(*occ.key()))
+					},
+					Entry::Vacant(v) => {
+						v.insert(tx);
+					}
+				}
+
+				let sr = self.msg_to_server.send(Message::RequestSender(
+					packet,
+					StreamReceiver::new(rx)
+				)).await;
+
+				match sr {
+					Ok(_) => Ok(SendBack::None),
+					// the server has no interest anymore
+					// Let's close the connection
+					Err(_) => Ok(SendBack::CloseWithPacket)
+				}
 			},
 			Kind::Stream => {
-				match self.waiting_on_client.get_mut(&id) {
-					Some(sender) => {
-						if let Err(_) = sender.send(packet).await {
+				match self.waiting_on_client.entry(id) {
+					Entry::Occupied(mut occ) => {
+						if let Err(_) = occ.get_mut().send(packet).await {
+							// since the stream is closed we should remove it
+							occ.remove_entry();
 							// we should send a response telling the other side
-							// that the response is closed
+							// that the stream is closed
 							let p = self.stream_close_packet(id);
 							Ok(SendBack::Packet(p))
 						} else {
 							Ok(SendBack::None)
 						}
 					},
-					None => {
+					Entry::Vacant(_) => {
 						// since the client could send multiple streams
 						// before we can send him a streamclosed
-						// we cannot return an error
+						// we just ignore this packet
 						let p = self.stream_close_packet(id);
 						Ok(SendBack::Packet(p))
 					}
@@ -283,27 +346,59 @@ where
 				self.waiting_on_server.close(id);
 				Ok(SendBack::None)
 			},
-			Kind::Close => {
-				Ok(SendBack::Close)
-			},
-			Kind::Ping => {
-				Ok(SendBack::None)
-			},
-			k => {
-				Err(PacketError::Header(format!("{:?} not supported", k)).into())
-			}
+			Kind::Close => Ok(SendBack::Close),
+			Kind::Ping => Ok(SendBack::None),
+			k => Err(TaskError::WrongPacketKind(k.to_str()))
 		}
 	}
 
 	/// returns None if nothing is left to be done
 	/// if close=true is once set this cannot be reversed 
 	pub async fn to_send(&mut self) -> Option<P> {
-		// todo this can probably 
-
-		// a request to receive a receiving stream
-		// self.receivers
-
 		self.waiting_on_server.to_send().await
+	}
+
+	fn malformed_request(&self, id: u32) -> P {
+		let mut p = P::empty();
+		// todo maybe replace with a malformed request
+		let flags = Flags::new(Kind::MalformedRequest);
+		p.header_mut().set_flags(flags);
+		p.header_mut().set_id(id);
+
+		p
+	}
+
+	/// we received a packet which had a malformed body
+	pub(crate) fn packet_error(
+		&mut self,
+		header: P::Header,
+		e: PacketError
+	) -> Result<SendBack<P>, TaskError> {
+		let flags = header.flags();
+		let id = header.id();
+		let kind = flags.kind();
+
+		match kind {
+			Kind::Request => Ok(SendBack::Packet(self.malformed_request(id))),
+			Kind::RequestSender |
+			Kind::RequestReceiver => {
+				Ok(SendBack::Packet(self.stream_close_packet(id)))
+			},
+			Kind::Stream => {
+				// ignore a stream packet which had an error
+				eprintln!(
+					"failed to parse stream packet {} {:?}",
+					header.id(),
+					e
+				);
+				Ok(SendBack::None)
+			},
+			// this should not have a user generated so this should never fail
+			Kind::Close |
+			Kind::Ping |
+			Kind::StreamClosed => Err(TaskError::Packet(e)),
+			k => Err(TaskError::WrongPacketKind(k.to_str()))
+		}
 	}
 
 	pub fn close(&mut self) -> P {
@@ -315,5 +410,4 @@ where
 
 		p
 	}
-
 }

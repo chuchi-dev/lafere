@@ -1,11 +1,10 @@
+use crate::error::TaskError;
 
 use crypto::cipher::{EphemeralKeypair, Key, Nonce, PublicKey};
 use crypto::signature::{self as sign, Signature};
 use bytes::{Cursor, BytesRead, BytesWrite, BytesSeek};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-
-type Result<T> = std::result::Result<T, crate::StreamError>;
 
 const BASE_LEN: usize = PublicKey::LEN + Nonce::LEN * 2;
 const TO_SIGN_LEN: usize = BASE_LEN + PublicKey::LEN;
@@ -35,7 +34,7 @@ pub(crate) struct Handshake {
 pub(crate) async fn server_handshake<S>(
 	sign_key: &sign::Keypair,
 	stream: &mut S
-) -> Result<Handshake>
+) -> Result<Handshake, TaskError>
 where S: AsyncRead + AsyncWrite + Unpin {
 
 	// - client pk
@@ -43,7 +42,8 @@ where S: AsyncRead + AsyncWrite + Unpin {
 		let mut buffer = [0u8; PublicKey::LEN];
 
 		// - receive 32 bytes (random client public key)
-		stream.read_exact(&mut buffer).await?;
+		stream.read_exact(&mut buffer).await
+			.map_err(TaskError::Io)?;
 
 		PublicKey::from(buffer)
 	};	
@@ -72,7 +72,8 @@ where S: AsyncRead + AsyncWrite + Unpin {
 
 		// now send
 		buffer.seek(0);
-		stream.write_all(buffer.read(TO_SEND_LEN)).await?;
+		stream.write_all(buffer.read(TO_SEND_LEN)).await
+			.map_err(TaskError::Io)?;
 	}
 
 	// - diffie_hellman
@@ -98,18 +99,20 @@ where S: AsyncRead + AsyncWrite + Unpin {
 pub(crate) async fn client_handshake<S>(
 	sign_pk: &sign::PublicKey,
 	stream: &mut S
-) -> Result<Handshake>
+) -> Result<Handshake, TaskError>
 where S: AsyncRead + AsyncWrite + Unpin {
 
 	let client_kp = EphemeralKeypair::new();
 	// send pk
-	stream.write_all(client_kp.public().as_ref()).await?;
+	stream.write_all(client_kp.public().as_ref()).await
+		.map_err(TaskError::Io)?;
 
 
 	let (server_pk, send_nonce, recv_nonce) = {
 		let mut buffer = Cursor::new([0u8; MAX_LEN]);
 
-		stream.read_exact(&mut buffer.as_mut()[..TO_SEND_LEN]).await?;
+		stream.read_exact(&mut buffer.as_mut()[..TO_SEND_LEN]).await
+			.map_err(TaskError::Io)?;
 
 		// verify signature
 		buffer.seek(BASE_LEN);
@@ -120,7 +123,7 @@ where S: AsyncRead + AsyncWrite + Unpin {
 
 		buffer.seek(0);
 		if !sign_pk.verify(buffer.read(TO_SIGN_LEN), &sign) {
-			todo!("signatured does not match")
+			return Err(TaskError::IncorrectSignature)
 		}
 
 		// read message

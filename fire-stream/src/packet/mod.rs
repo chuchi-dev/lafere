@@ -1,4 +1,3 @@
-
 mod bytes;
 pub use self::bytes::*;
 
@@ -7,6 +6,9 @@ pub use body_bytes::*;
 
 mod packet;
 pub use packet::*;
+
+#[cfg(test)]
+pub mod test;
 
 #[cfg(feature = "encrypted")]
 mod encrypted_bytes;
@@ -22,6 +24,7 @@ use std::fmt;
 
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum PacketError {
 	Header(String),
 	Body(String),
@@ -32,7 +35,10 @@ pub enum PacketError {
 	#[cfg_attr(docsrs, doc(cfg(feature = "fs")))]
 	Io(std::io::Error),
 	/// Returns the size that should have been sent
-	BodyLimitReached(usize)
+	BodyLimitReached(u32),
+	#[cfg(feature = "encrypted")]
+	#[cfg_attr(docsrs, doc(cfg(feature = "encrypted")))]
+	MacNotEqual
 }
 
 impl fmt::Display for PacketError {
@@ -46,7 +52,9 @@ impl fmt::Display for PacketError {
 			Self::Io(s) => write!(f, "PacketError::Io: {}", s),
 			Self::BodyLimitReached(s) => {
 				write!(f, "PacketError::BodyLimitReached: {}", s)
-			}
+			},
+			#[cfg(feature = "encrypted")]
+			Self::MacNotEqual => write!(f, "PacketError::MacNotEqual")
 		}
 	}
 }

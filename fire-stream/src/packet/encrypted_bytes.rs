@@ -1,11 +1,8 @@
+use super::{BodyBytes, BodyBytesMut, PacketBytes, PacketError};
 
-use super::{BodyBytes, BodyBytesMut, PacketBytes};
-
-use crypto::cipher::{MacNotEqual, Key, Mac};
+use crypto::cipher::{Key, Mac};
 
 use bytes::{Bytes, BytesMut, BytesRead, BytesWrite, BytesSeek};
-
-type MacResult<T> = std::result::Result<T, MacNotEqual>;
 
 
 const OFFSET: usize = Mac::LEN;
@@ -61,7 +58,6 @@ impl PacketBytes for EncryptedBytes {
 }
 
 impl EncryptedBytes {
-
 	pub(crate) fn has_body(&self) -> bool {
 		self.bytes.len() > OFFSET * 2 + self.header_len
 	}
@@ -99,18 +95,25 @@ impl EncryptedBytes {
 
 	}
 
-	pub(crate) fn decrypt_header(&mut self, key: &mut Key) -> MacResult<()> {
+	pub(crate) fn decrypt_header(
+		&mut self,
+		key: &mut Key
+	) -> Result<(), PacketError> {
 		let mut header: BytesMut = self.full_header_mut().into();
 		let mac = Mac::from_slice(header.read(OFFSET));
 		key.decrypt(header.remaining_mut(), &mac)
+			.map_err(|_| PacketError::MacNotEqual)
 	}
 
-	pub(crate) fn decrypt_body(&mut self, key: &mut Key) -> MacResult<()> {
+	pub(crate) fn decrypt_body(
+		&mut self,
+		key: &mut Key
+	) -> Result<(), PacketError> {
 		let mut body: BytesMut = self.full_body_mut().into();
 		let mac = Mac::from_slice(body.read(OFFSET));
 		key.decrypt(body.remaining_mut(), &mac)
+			.map_err(|_| PacketError::MacNotEqual)
 	}
-
 }
 
 #[cfg(test)]

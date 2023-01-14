@@ -1,107 +1,17 @@
 use crate::client::{Connection as Client, Config as ClientConfig, ReconStrat};
 use crate::server::{Connection as Server, Config as ServerConfig};
-use crate::timeout::TimeoutReader;
+use crate::util::{watch, TimeoutReader, ByteStream};
 use crate::packet::{Packet, PlainBytes};
-use crate::packet::builder::PacketReceiver;
-use crate::error::StreamError;
-use crate::traits::ByteStream;
-use crate::watch;
+use crate::packet::builder::{PacketReceiver, PacketReceiverError};
+use crate::error::TaskError;
 use crate::handler::{client, server, TaskHandle, SendBack};
 
 use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
 use tokio::time::{interval, Duration, MissedTickBehavior};
 
-type Result<T> = std::result::Result<T, StreamError>;
+use std::io;
 
-macro_rules! client_bg_reconnect {
-	(
-		$fn:ident(
-			$stream:ident,
-			$bg_handler:ident,
-			$cfg_rx:ident,
-			$rx_close:ident,
-			$recon_strat:ident,
-			|$n_stream:ident, $cfg:ident| $block:block
-		)
-	) => (
-
-		let mut stream = Some($stream);
-
-		loop {
-
-			// reconnect if 
-			let stream = match (stream.take(), &mut $recon_strat) {
-				(Some(s), _) => s,
-				// no recon and no stream
-				// close connection
-				(None, None) => unreachable!(),
-				(None, Some(recon)) => {
-					let mut err_counter = 0;
-
-					loop {
-
-						let stream = (recon.inner)(err_counter).await;
-						match stream {
-							Ok(s) => break s,
-							Err(e) => {
-								eprintln!(
-									"reconnect failed attempt {} {:?}",
-									err_counter,
-									e
-								);
-								err_counter += 1;
-							}
-						}
-
-					}
-				}
-			};
-
-			let cfg = $cfg_rx.newest();
-			let stream = {
-				let $n_stream = stream;
-				let $cfg = cfg;
-
-				$block
-			};
-			let stream = match stream {
-				Ok(s) => s,
-				Err(e) => {
-					eprintln!("creating packetstream failed {:?}", e);
-					// close since we can't reconnect
-					if $recon_strat.is_none() {
-						return Err(e)
-					}
-
-					continue
-				}
-			};
-
-			let r = $fn(
-				stream,
-				&mut $bg_handler,
-				&mut $cfg_rx,
-				&mut $rx_close
-			).await;
-
-			match r {
-				Ok(o) => return Ok(o),
-				Err(e) => {
-					eprintln!("client_bg_stream closed with error {:?}", e);
-					if $recon_strat.is_none() {
-						// close since we can't reconnect
-						return Err(e)
-					}
-				}
-			}
-
-			// close all started requests
-			$bg_handler.close_all_started();
-
-		}
-	)
-}
 
 /// Creates a new client from a stream, without using any encryption.
 pub(crate) fn client<S, P>(
@@ -184,8 +94,7 @@ where
 	S: ByteStream,
 	P: Packet<PlainBytes>
 {
-
-	fn new(stream: S, timeout: Duration, body_limit: usize) -> Self {
+	fn new(stream: S, timeout: Duration, body_limit: u32) -> Self {
 		Self {
 			stream: TimeoutReader::new(stream, timeout),
 			builder: PacketReceiver::new(body_limit)
@@ -196,7 +105,7 @@ where
 		self.stream.timeout()
 	}
 
-	async fn send(&mut self, packet: P) -> Result<()> {
+	async fn send(&mut self, packet: P) -> Result<(), io::Error> {
 		let bytes = packet.into_bytes();
 		let slice = bytes.as_slice();
 		self.stream.write_all(slice).await?;
@@ -205,89 +114,13 @@ where
 	}
 
 	/// this function is abort safe
-	async fn receive(&mut self) -> Result<P> {
+	async fn receive(&mut self) -> Result<P, PacketReceiverError<P::Header>> {
 		self.builder.read_header(&mut self.stream, |_| Ok(())).await?;
 		self.builder.read_body(&mut self.stream, |_| Ok(())).await
 	}
 
-	async fn shutdown(&mut self) -> Result<()> {
-		self.stream.shutdown().await.map_err(Into::into)
-	}
-}
-
-macro_rules! bg_stream {
-	($name:ident, $handler:ty, $bytes:ty, $cfg:ty) => {
-		async fn $name<S, P>(
-			mut stream: PacketStream<S, P>,
-			handler: &mut $handler,
-			cfg_rx: &mut watch::Receiver<$cfg>,
-			mut close: &mut oneshot::Receiver<()>
-		) -> Result<()>
-		where
-			S: ByteStream,
-			P: Packet<$bytes>
-		{
-			let mut should_close = false;
-			let mut close_packet = None;
-
-			let timeout = stream.timeout();
-			let diff = match timeout.as_secs() {
-				0..=1 => 0,
-				0..=10 => 1,
-				_ => 5
-			};
-			let mut interval = interval(
-				stream.timeout() - Duration::from_secs(diff)
-			);
-			interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
-			loop {
-				tokio::select!{
-					packet = stream.receive(), if !should_close => {
-						let packet = packet?;
-						let r_packet = handler.send(packet).await?;
-						match r_packet {
-							SendBack::None => {},
-							SendBack::Packet(p) => {
-								stream.send(p).await?;
-							},
-							SendBack::Close => {
-								should_close = true;
-								let _ = handler.close();
-							}
-						}
-					},
-					Some(packet) = handler.to_send() => {
-						// Todo make this not block until everything is sent
-						// this can stop receiving
-						stream.send(packet).await?;
-					},
-					_ping = interval.tick(), if !should_close => {
-						stream.send(handler.ping_packet()).await?;
-					},
-					_ = &mut close, if !should_close => {
-						should_close = true;
-						let packet = handler.close();
-						close_packet = Some(packet);
-					},
-					Some(cfg) = cfg_rx.recv(), if !should_close => {
-						// should update configuration
-						stream.stream.set_timeout(cfg.timeout);
-						stream.builder.set_body_limit(cfg.body_limit);
-					},
-					else => {
-						if let Some(packet) = close_packet.take() {
-							let _ = stream.send(packet).await;
-						}
-						if let Err(e) = stream.shutdown().await {
-							eprintln!("error shutting down {:?}", e);
-						}
-						return Ok(())
-					}
-				}
-
-			}
-		}
+	async fn shutdown(&mut self) -> Result<(), io::Error> {
+		self.stream.shutdown().await
 	}
 }
 
@@ -303,11 +136,12 @@ bg_stream!(
 mod tests {
 	use super::*;
 	use crate::packet::test::{TestPacket};
-	use crate::handler::Message;
-	use crate::pinned_future::PinnedFuture;
+	use crate::server::Message;
+	use crate::util::PinnedFuture;
 
 	use tokio::net::{TcpStream, TcpListener};
 	use tokio::time::{sleep, Duration};
+
 
 	/// create two tcp stream which communicate with each other
 	async fn tcp_streams() -> (TcpStream, TcpStream) {
@@ -354,7 +188,7 @@ mod tests {
 
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::OpenStream(req, stream) => {
+				Message::RequestReceiver(req, stream) => {
 					assert_eq!(req.num1, 5);
 					assert_eq!(req.num2, 6);
 
@@ -370,7 +204,7 @@ mod tests {
 
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::CreateStream(req, mut stream) => {
+				Message::RequestSender(req, mut stream) => {
 					assert_eq!(req.num1, 11);
 					assert_eq!(req.num2, 12);
 
@@ -387,7 +221,6 @@ mod tests {
 			};
 
 			bob.wait().await.unwrap();
-
 		});
 
 		// let's make a request
@@ -398,7 +231,7 @@ mod tests {
 
 		// let's create a stream to listen
 		let req = TestPacket::new(5, 6);
-		let mut stream = alice.open_stream(req).await.unwrap();
+		let mut stream = alice.request_receiver(req).await.unwrap();
 
 		let res = stream.receive().await.unwrap();
 		assert_eq!(res.num1, 7);
@@ -411,7 +244,7 @@ mod tests {
 
 		// now request a stream.sender
 		let req = TestPacket::new(11, 12);
-		let stream = alice.create_stream(req).await.unwrap();
+		let stream = alice.request_sender(req).await.unwrap();
 
 		let req = TestPacket::new(13, 14);
 		stream.send(req).await.unwrap();
@@ -430,7 +263,6 @@ mod tests {
 
 	#[tokio::test]
 	async fn test_plain_stream_reconnect() {
-
 		let timeout = Duration::from_millis(10);
 
 		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -540,5 +372,4 @@ mod tests {
 		// wait until bob's task finishes
 		server.await.unwrap();
 	}
-
 }

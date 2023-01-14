@@ -1,6 +1,4 @@
-
 use super::{Packet, PacketHeader, PacketBytes, PacketError};
-use crate::Result;
 
 use std::{mem, io};
 
@@ -15,11 +13,12 @@ where
 	P: Packet<B>,
 	B: PacketBytes
 {
+	/// bytes is always >= P::Header::LEN
 	bytes: B,
 	header: Option<P::Header>,
 	read: usize,
 	/// if size is zero it's not limited
-	body_limit: usize
+	body_limit: u32
 }
 
 impl<P, B> PacketReceiver<P, B>
@@ -27,21 +26,20 @@ where
 	P: Packet<B>,
 	B: PacketBytes
 {
-
-	pub fn new(body_limit: usize) -> Self {
+	pub fn new(body_limit: u32) -> Self {
 		Self {
-			bytes: B::new(P::Header::len()),
+			bytes: B::new(P::Header::LEN as usize),
 			header: None,
 			read: 0,
 			body_limit
 		}
 	}
 
-	pub fn set_body_limit(&mut self, body_limit: usize) {
+	pub fn set_body_limit(&mut self, body_limit: u32) {
 		self.body_limit = body_limit;
 	}
 
-	/// May becalled multiple times
+	/// May be called multiple times
 	/// 
 	/// ## Error
 	/// if an error occurs, you should probably
@@ -50,10 +48,10 @@ where
 		&mut self,
 		reader: &mut R,
 		mutate: F
-	) -> Result<()>
+	) -> Result<(), PacketReceiverError<P::Header>>
 	where
 		R: AsyncReadExt + Unpin,
-		F: FnOnce(&mut B) -> Result<()>
+		F: FnOnce(&mut B) -> Result<(), PacketError>
 	{
 		if self.header.is_some() {
 			return Ok(())
@@ -64,7 +62,8 @@ where
 		header_bytes.seek(self.read);
 
 		loop {
-			let r = reader.read(header_bytes.remaining_mut()).await?;
+			let r = reader.read(header_bytes.remaining_mut()).await
+				.map_err(Error::Io)?;
 			header_bytes.advance(r);
 			self.read += r;
 
@@ -73,15 +72,17 @@ where
 			}
 
 			if r == 0 {
-				return Err(eof().into())
+				return Err(PacketReceiverError::Io(eof()))
 			}
 		}
 
 		// now mutate the header if needed
-		mutate(&mut self.bytes)?;
+		mutate(&mut self.bytes)
+			.map_err(Error::Hard)?;
 
 		// convert the header bytes to a header
-		let header = P::Header::from_bytes(self.bytes.header())?;
+		let header = P::Header::from_bytes(self.bytes.header())
+			.map_err(Error::Hard)?;
 		self.header = Some(header);
 		self.read = 0;
 
@@ -98,10 +99,10 @@ where
 		&mut self,
 		reader: &mut R,
 		mutate: F
-	) -> Result<P>
+	) -> Result<P, PacketReceiverError<P::Header>>
 	where
 		R: AsyncReadExt + Unpin,
-		F: FnOnce(&mut B) -> Result<()>
+		F: FnOnce(&mut B) -> Result<(), PacketError>
 	{
 		let len = self.header.as_ref()
 			.expect("read the header first")
@@ -111,26 +112,26 @@ where
 			return self.take_message()
 		}
 
-		// if we never read prepare the body size
+		// if we never read, prepare the body size
 		if self.read == 0 {
-
 			if self.body_limit != 0 && len > self.body_limit {
-				return Err(PacketError::BodyLimitReached(len).into())
+				return Err(Error::Hard(PacketError::BodyLimitReached(len)))
 			}
 
 			let mut body_bytes = self.bytes.body_mut();
-			body_bytes.resize(len);
-			debug_assert_eq!(body_bytes.as_mut().len(), len);
+			body_bytes.resize(len as usize);
+			debug_assert_eq!(body_bytes.as_mut().len(), len as usize);
 		}
 
 		// lets read all header bytes
 		let mut body_bytes = self.bytes.full_body_mut();
 		body_bytes.seek(self.read);
 
-		assert!(body_bytes.len() > 0, "already called read_body");
+		assert!(body_bytes.len() > 0, "a body should never be empty");
 
 		loop {
-			let r = reader.read(body_bytes.remaining_mut()).await?;
+			let r = reader.read(body_bytes.remaining_mut()).await
+				.map_err(PacketReceiverError::Io)?;
 			body_bytes.advance(r);
 			self.read += r;
 
@@ -139,33 +140,54 @@ where
 			}
 
 			if r == 0 {
-				return Err(eof().into())
+				return Err(Error::Io(eof()))
 			}
 		}
 
 		// now mutate the body if needed
-		mutate(&mut self.bytes)?;
+		mutate(&mut self.bytes)
+			.map_err(|e| self.soft_error(e))?;
 
 		self.take_message()
 	}
 
-	fn take_message(&mut self) -> Result<P> {
-
+	fn take_message(&mut self) -> Result<P, PacketReceiverError<P::Header>> {
 		let bytes = mem::replace(
 			&mut self.bytes,
-			B::new(P::Header::len())
+			B::new(P::Header::LEN as usize)
 		);
 
 		let header = self.header.take().unwrap();
-
 		self.read = 0;
 
-		P::from_bytes_and_header(bytes, header)
-			.map_err(|e| e.into())
+		// this is soft since we know the 
+		P::from_bytes_and_header(bytes, header.clone())
+			.map_err(|e| Error::Soft(header, e))
 	}
 
+	/// ## Panics
+	/// If there is no header
+	fn soft_error(&mut self, e: PacketError) -> PacketReceiverError<P::Header> {
+		// reset all fields
+		self.bytes = B::new(P::Header::LEN as usize);
+		let header = self.header.take().unwrap();
+		self.read = 0;
+
+		Error::Soft(header, e)
+	}
 }
 
+pub enum PacketReceiverError<H> {
+	Io(io::Error),
+	/// If this error is returned the packet state is broken and the connection
+	/// needs to be opened again
+	Hard(PacketError),
+	/// If this error is returned this means the packet is malformed but
+	/// the header is intact and the connection can be kept open
+	Soft(H, PacketError)
+}
+
+type Error<H> = PacketReceiverError<H>;
 
 fn eof() -> io::Error {
 	io::Error::new(io::ErrorKind::UnexpectedEof, "early eof")
