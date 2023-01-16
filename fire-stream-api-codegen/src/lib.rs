@@ -1,6 +1,7 @@
 mod args;
 mod api;
 mod message;
+mod action;
 mod util;
 
 use args::ApiArgs;
@@ -46,6 +47,15 @@ pub fn derive_from_message(input: TokenStream) -> TokenStream {
 	let input = parse_macro_input!(input as DeriveInput);
 
 	message::from_expand(input)
+		.unwrap_or_else(|e| e.to_compile_error())
+		.into()
+}
+
+#[proc_macro_derive(Action)]
+pub fn derive_action(input: TokenStream) -> TokenStream {
+	let input = parse_macro_input!(input as DeriveInput);
+
+	action::expand(input)
 		.unwrap_or_else(|e| e.to_compile_error())
 		.into()
 }

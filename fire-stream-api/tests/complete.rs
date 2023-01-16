@@ -16,37 +16,17 @@ mod api {
 	use serde::{Serialize, Deserialize};
 
 	use fire_stream_api::{
-		IntoMessage, FromMessage,
-		message,
+		IntoMessage, FromMessage, Action,
 		error::{ApiError, RequestError, MessageError},
 		request::Request
 	};
 
-	#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+	#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Action)]
+	#[repr(u16)]
 	pub enum Action {
-		Act1,
-		Act2,
-		MyAddress
-	}
-
-	impl message::Action for Action {
-		fn from_u16(num: u16) -> Option<Self> {
-			println!("message action from {}", num);
-			match num {
-				1 => Some(Self::Act1),
-				2 => Some(Self::Act2),
-				3 => Some(Self::MyAddress),
-				_ => None
-			}
-		}
-
-		fn as_u16(&self) -> u16 {
-			match self {
-				Self::Act1 => 1,
-				Self::Act2 => 2,
-				Self::MyAddress => 3
-			}
-		}
+		Act1 = 1,
+		Act2 = 2,
+		MyAddress = 3
 	}
 
 	#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
