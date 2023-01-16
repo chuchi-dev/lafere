@@ -1,11 +1,10 @@
 use crate::message::{Action, Message};
-use crate::util::PinnedFuture;
+use crate::request::RequestHandler;
 
-use stream::listener::{SocketAddr, Listener, ListenerExt};
-use stream::handler;
+use stream::util::{SocketAddr, Listener, ListenerExt};
 use stream::packet::{Packet, PacketBytes};
 pub use stream::packet::PlainBytes;
-use stream::server::Connection;
+use stream::server::{self, Connection};
 pub use stream::server::Config;
 
 #[cfg(feature = "encrypted")]
@@ -13,8 +12,8 @@ pub use stream::packet::EncryptedBytes;
 
 use std::collections::HashMap;
 use std::any::{Any, TypeId};
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::io;
 
 #[cfg(feature = "encrypted")]
 use crypto::signature::Keypair;
@@ -59,7 +58,7 @@ impl Data {
 }
 
 struct Requests<A, B> {
-	inner: HashMap<A, Box<dyn RequestHandler<A, B> + Send + Sync>>
+	inner: HashMap<A, Box<dyn RequestHandler<B, Action=A> + Send + Sync>>
 }
 
 impl<A, B> Requests<A, B>
@@ -72,11 +71,14 @@ where A: Action {
 	}
 
 	fn insert<H>(&mut self, handler: H)
-	where H: RequestHandler<A, B> + Send + Sync + 'static {
+	where H: RequestHandler<B, Action=A> + Send + Sync + 'static {
 		self.inner.insert(H::action(), Box::new(handler));
 	}
 
-	fn get(&self, action: &A) -> Option<&Box<dyn RequestHandler<A, B> + Send + Sync>> {
+	fn get(
+		&self,
+		action: &A
+	) -> Option<&Box<dyn RequestHandler<B, Action=A> + Send + Sync>> {
 		self.inner.get(action)
 	}
 
@@ -95,9 +97,8 @@ where
 	A: Action,
 	L: Listener
 {
-
 	pub fn register_request<H>(&mut self, handler: H)
-	where H: RequestHandler<A, B> + Send + Sync + 'static {
+	where H: RequestHandler<B, Action=A> + Send + Sync + 'static {
 		handler.validate_data(&self.data);
 		self.requests.insert(handler);
 	}
@@ -107,7 +108,7 @@ where
 		self.data.insert(data);
 	}
 
-	async fn run_raw<F>(self, new_connection: F) -> stream::Result<()>
+	async fn run_raw<F>(self, new_connection: F) -> io::Result<()>
 	where
 		A: Action + Send + Sync + 'static,
 		B: PacketBytes + Send + 'static,
@@ -130,49 +131,64 @@ where
 			let share = s.clone();
 			tokio::spawn(async move {
 				while let Some(req) = con.receive().await {
+					// todo replace with let else
+					let (msg, resp) = match req {
+						server::Message::Request(msg, resp) => (msg, resp),
+						// ignore streams for now
+						_ => continue
+					};
 
-					if let handler::Message::Request(msg, resp) = req {
+					let share = share.clone();
+					let session = session.clone();
 
-						// todo should probably spawn another task
-						let share = share.clone();
-						let session = session.clone();
+					let action = match msg.action() {
+						Some(act) => *act,
+						// todo once we bump the version again
+						// we need to pass our own errors via packets
+						// not only those from the api users
+						None => {
+							eprintln!("invalid action received");
+							continue
+						}
+					};
 
-						tokio::spawn(async move {
-
-							let action = *msg.action();
-							let handler = match share.requests.get(&action) {
-								Some(handler) => handler,
-								None => {
-									eprintln!("no handler for {:?}", action);
-									return;
-								}
-							};
-							let r = handler.handle(
-								msg,
-								&share.data,
-								&session
-							).await;
-
-							if let Some(mut res_msg) = r {
-								res_msg.header_mut().set_action(action);
-								// i don't care about the response
-								let _ = resp.send(res_msg);
+					tokio::spawn(async move {
+						let handler = match share.requests.get(&action) {
+							Some(handler) => handler,
+							// todo once we bump the version again
+							// we need to pass our own errors via packets
+							// not only those from the api users
+							None => {
+								eprintln!("no handler for {:?}", action);
+								return;
 							}
+						};
+						let r = handler.handle(
+							msg,
+							&share.data,
+							&session
+						).await;
 
-						});
-					}
-
+						match r {
+							Ok(mut msg) => {
+								msg.header_mut().set_action(action);
+								// i don't care about the response
+								let _ = resp.send(msg);
+							},
+							Err(e) => {
+								// todo once we bump the version again
+								// we need to pass our own errors via packets
+								// not only those from the api users
+								eprintln!("handler returned an error {:?}", e);
+							}
+						}
+					});
 				}
 			});
 		}
 	}
 
 }
-
-// only
-// - set
-// - remove
-// - get (supported)
 
 pub struct Session {
 	// (SocketAddr, S)
@@ -230,7 +246,7 @@ where
 		}
 	}
 	
-	pub async fn run(self) -> stream::Result<()>
+	pub async fn run(self) -> io::Result<()>
 	where A: Send + Sync + 'static {
 		let cfg = self.cfg.clone();
 		self.run_raw(|_, stream| {
@@ -246,8 +262,7 @@ where
 	A: Action,
 	L: Listener
 {
-
-	pub fn new(listener: L, cfg: Config, key: Keypair) -> Self {
+	pub fn new_encrypted(listener: L, cfg: Config, key: Keypair) -> Self {
 		Self {
 			inner: listener,
 			requests: Requests::new(),
@@ -257,14 +272,13 @@ where
 		}
 	}
 
-	pub async fn run(self) -> stream::Result<()>
+	pub async fn run(self) -> io::Result<()>
 	where A: Send + Sync + 'static {
 		let cfg = self.cfg.clone();
 		self.run_raw(move |key, stream| {
 			Connection::new_encrypted(stream, cfg.clone(), key.clone())
 		}).await
 	}
-
 }
 
 // impl
@@ -274,350 +288,48 @@ struct Shared<A, B> {
 	data: Data
 }
 
-// we should have a request handler +
-// a raw request handler which expects a message
-// instead of a response
 
-pub trait RequestHandler<A, B> {
-
-	fn action() -> A
-	where Self: Sized;
-
-	/// if the data is not available just panic
-	fn validate_data(&self, data: &Data);
-
-	/// handles a message with Self::ACTION as action.
-	/// 
-	/// if None is returned the request is abandoned and
-	/// the requestor receives a RequestDropped error
-	fn handle<'a>(
-		&'a self,
-		msg: Message<A, B>,
-		data: &'a Data,
-		session: &'a Session
-	) -> PinnedFuture<'a, Option<Message<A, B>>>;
-}
-
-/// Helper to implement a RequestHandler.
-///
-/// ## Note
-/// Even though you need to specify the type without a reference
-/// that actual type will have a reference.
-/// 
-/// ## Usage
-/// ```ignore
-/// request_handler! {
-/// 	async fn name<Action>(
-/// 		req: ReqType,
-/// 		some: Data
-/// 	) -> Result<Response> {}
-/// }
-/// ```
-#[doc(hidden)]
-#[macro_export]
-macro_rules! inner_request_handler {
-	// final handler
-	(
-		async fn<$($gen:ident, $gen2:ident)?> $name:ident<$a:ty, $b:ty, $d:ty>(
-			$req:ident: $req_ty:ty,
-			$($data:ident: $data_ty:ty),*
-		) -> $ret_ty:ty
-		$block:block,
-		$request_trait:ident,
-		// serialize block
-		|$se:ident| $serialize_block:block,
-		// deserialize block
-		|$de:ident| $deserialize_block:block
-	) => (
-
-		#[allow(non_camel_case_types)]
-		struct $name;
-
-		impl<$($gen: $crate::message::PacketBytes + Send + 'static)?>
-			$crate::server::RequestHandler<$a, $b> for $name
-		{
-
-
-			// const ACTION = <$req_ty as $crate::request::Request<$a, $b>>::ACTION;
-			fn action() -> $a {
-				<$req_ty as $crate::request::$request_trait<$a, $b>>::ACTION
-			}
-
-			fn validate_data(&self, data: &$crate::server::Data) {
-				$(
-					assert!(
-						data.exists::<$data_ty>(),
-						concat!("data ", stringify!($data_ty), " does not exists")
-					);
-				)*
-			}
-
-			fn handle<'a>(
-				&'a self,
-				msg: $crate::message::Message<$a, $b>,
-				data: &'a $crate::server::Data,
-				session: &'a $crate::server::Session
-			) -> $crate::util::PinnedFuture<'a, Option<$crate::message::Message<$a, $b>>> {
-				use $crate::error::ApiError as __ApiError;
-
-				async fn __handle(
-					$req: $req_ty,
-					$($data: &$data_ty),*
-				) -> $ret_ty {
-					$block
-				}
-
-				// use $crate::{
-				// 	message::Message,
-				// 	server::{Data, Session},
-				// 	util::PinnedFuture,
-				// 	request::Request
-				// };
-				// use std::result::Result;
-
-				use $crate::request::$request_trait as __Request;
-				use $crate::message::Message as __Message;
-
-				// type __Message = $crate::message::Message<$a, $b>;
-
-				type __Error<C> = <$req_ty as __Request<$a, C>>::Error;
-				type __Response<C> = <$req_ty as __Request<$a, C>>::Response;
-
-				async fn __handle_with_error<$($gen2: $crate::message::PacketBytes + Send + 'static)?>(
-					msg: __Message<$a, $d>,
-					data: &$crate::server::Data,
-					session: &$crate::server::Session
-				) -> std::result::Result<__Message<$a, $d>, __Error<$d>> {
-
-					// extract all data
-					$(
-						let $data: &$data_ty = data.get_or_sess(&session)
-							.ok_or_else(|| {
-								__Error::<$d>::internal(concat!(
-									"could not find ",
-									stringify!($data_ty)
-								))
-							})?;
-					)*
-
-					// now parse the request with json
-
-					// A request should never contain an error
-					if !msg.is_success() {
-						return Err(__Error::<$d>::request(concat!(
-							"received a message with an error in ",
-							stringify!($req_ty)
-						)));
-					}
-
-					let $de = msg;
-					let req: $req_ty = { $deserialize_block }?;
-
-					let res: __Response<$d> = __handle(req, $($data),*).await?;
-
-					let $se = res;
-
-					{ $serialize_block }
-				}
-
-				$crate::util::PinnedFuture::new(async move {
-		
-					let res = __handle_with_error(msg, data, session).await;
-					match res {
-						Ok(res) => Some(res),
-						Err(e) => {
-							eprintln!(
-								"request handler error {} in {:?}",
-								e,
-								<$req_ty as __Request<$a, $b>>::ACTION
-							);
-							// let's try to convert the error into a message
-							let mut err = __Message::new();
-							err.set_success(false);
-							err.body_mut().serialize(&e)
-								.map_err(|e| {
-									eprintln!("request handler could not \
-										serialize error {:?}", e);
-								})
-								.map(|_| err)
-								.ok()
-						}
-					}
-
-				})
-			}
-		}
-	)
-}
-
-/// Helper to implement a RequestHandler.
-///
-/// ## Note
-/// Even though you need to specify the type without a reference
-/// that actual type will have a reference.
-/// 
-/// ## Usage
-/// ```ignore
-/// raw_request_handler! {
-/// 	async fn name<Action>(
-/// 		req: ReqType,
-/// 		some: Data
-/// 	) -> Result<Response> {}
-/// }
-/// ```
-#[macro_export]
-macro_rules! raw_request_handler {
-	// catch handler without generic parameters
-	(async fn $name:ident<$a:ty> $($tt:tt)*) => (
-		$crate::raw_request_handler!(async fn<B, D> $name<$a, B, D> $($tt)*);
-	);
-	// catch handler with both parameters defined
-	(async fn $name:ident<$a:ty, $b:ty> $($tt:tt)*) => (
-		$crate::raw_request_handler!(async fn<> $name<$a, $b, $b> $($tt)*);
-	);
-	// catch handler who has only the request argument
-	(
-		async fn<$($gen:ident, $gen2:ident)?> $name:ident<$a:ty, $b:ty, $d:ty>(
-			$req:ident: $req_ty:ty
-		) $($tt:tt)*
-	) => (
-		$crate::raw_request_handler!(
-			async fn<$($gen, $gen2)?> $name<$a, $b, $d>($req: $req_ty, ) $($tt)*
-		);
-	);
-	// final handler
-	(
-		async fn<$($gen:ident, $gen2:ident)?> $name:ident<$a:ty, $b:ty, $d:ty>(
-			$req:ident: $req_ty:ty,
-			$($data:ident: $data_ty:ty),*
-		) -> $ret_ty:ty
-		$block:block
-	) => (
-		$crate::inner_request_handler!(
-			async fn<$($gen, $gen2)?> $name<$a, $b, $d>(
-				$req: $req_ty,
-				$($data: $data_ty),*
-			) -> $ret_ty
-			{ $block },
-			RawRequest,
-			|se| {
-				$crate::message::SerdeMessage::into_message(se)
-			},
-			|de| {
-				$crate::message::SerdeMessage::from_message(de)
-			}
-		);
-	)
-}
-
-/// Helper to implement a RequestHandler.
-///
-/// ## Note
-/// Even though you need to specify the type without a reference
-/// that actual type will have a reference.
-/// 
-/// ## Usage
-/// ```ignore
-/// request_handler! {
-/// 	async fn name<Action>(
-/// 		req: ReqType,
-/// 		some: Data
-/// 	) -> Result<Response> {}
-/// }
-/// ```
-#[macro_export]
-macro_rules! request_handler {
-	// catch handler without generic parameters
-	(async fn $name:ident<$a:ty> $($tt:tt)*) => (
-		$crate::request_handler!(async fn<B, D> $name<$a, B, D> $($tt)*);
-	);
-	// catch handler with both parameters defined
-	(async fn $name:ident<$a:ty, $b:ty> $($tt:tt)*) => (
-		$crate::request_handler!(async fn<> $name<$a, $b, $b> $($tt)*);
-	);
-	// catch handler who has only the request argument
-	(
-		async fn<$($gen:ident, $gen2:ident)?> $name:ident<$a:ty, $b:ty, $d:ty>(
-			$req:ident: $req_ty:ty
-		) $($tt:tt)*
-	) => (
-		$crate::request_handler!(
-			async fn<$($gen, $gen2)?> $name<$a, $b, $d>($req: $req_ty, ) $($tt)*
-		);
-	);
-	// final handler
-	(
-		async fn<$($gen:ident, $gen2:ident)?> $name:ident<$a:ty, $b:ty, $d:ty>(
-			$req:ident: $req_ty:ty,
-			$($data:ident: $data_ty:ty),*
-		) -> $ret_ty:ty
-		$block:block
-	) => (
-		$crate::inner_request_handler!(
-			async fn<$($gen, $gen2)?> $name<$a, $b, $d>(
-				$req: $req_ty,
-				$($data: $data_ty),*
-			) -> $ret_ty
-			{ $block },
-			Request,
-			|se| {
-				let mut resp = __Message::new();
-				resp.body_mut()
-					.serialize(&se)
-					.map_err(|e| __Error::<$d>::internal(
-						format!("malformed response: {}", e)
-					))?;
-				Ok(resp)
-			},
-			|de| {
-				de.body().deserialize()
-					.map_err(|e| __Error::<$d>::request(
-						format!("malformed request: {}", e)
-					))
-			}
-		);
-	)
-}
-
-#[cfg(test)]
-mod tests {
-	use crate::derive_serde_message;
-	use crate::request;
+#[cfg(all(test, feature = "json"))]
+mod json_tests {
+	use codegen::{IntoMessage, FromMessage, api};
+	use crate::request::Request;
 	use crate::message;
 	use crate::error;
 
 	use std::fmt;
 
-	use stream::packet::PlainBytes;
-
 	use serde::{Serialize, Deserialize};
 
-	#[derive(Debug, Serialize, Deserialize)]
+
+	#[derive(Debug, Serialize, Deserialize, IntoMessage, FromMessage)]
+	#[message(json)]
 	struct TestReq {
 		hello: u64
 	}
 
-	#[derive(Debug, Serialize, Deserialize)]
+	#[derive(Debug, Serialize, Deserialize, IntoMessage, FromMessage)]
+	#[message(json)]
 	struct TestReq2 {
 		hello: u64
 	}
 
-	derive_serde_message!(TestReq);
-
-	#[derive(Debug, Serialize, Deserialize)]
+	#[derive(Debug, Serialize, Deserialize, IntoMessage, FromMessage)]
+	#[message(json)]
 	struct TestResp {
 		hi: u64
 	}
-
-	derive_serde_message!(TestResp);
 
 	#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 	pub enum Action {
 		Empty
 	}
 
-	#[derive(Debug, Clone, Serialize, Deserialize)]
-	pub enum Error {}
+	#[derive(Debug, Clone, Serialize, Deserialize, IntoMessage, FromMessage)]
+	#[message(json)]
+	pub enum Error {
+		RequestError(String),
+		MessageError(String)
+	}
 
 	impl fmt::Display for Error {
 		fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -625,83 +337,54 @@ mod tests {
 		}
 	}
 
+	impl std::error::Error for Error {}
+
 	impl error::ApiError for Error {
-		fn connection_closed() -> Self { todo!() }
-		fn request_dropped() -> Self { todo!() }
-		fn internal<E: error::Error>(_error: E) -> Self { todo!() }
-		fn request<E: error::Error>(_error: E) -> Self { todo!() }
-		fn response<E: error::Error>(_error: E) -> Self { todo!() }
-		fn other<E: error::Error>(_error: E) -> Self { todo!() }
+		fn from_request_error(e: error::RequestError) -> Self {
+			Self::RequestError(e.to_string())
+		}
+
+		fn from_message_error(e: error::MessageError) -> Self {
+			Self::MessageError(e.to_string())
+		}
 	}
 
 	impl message::Action for Action {
-		fn empty() -> Self { Self::Empty }
 		fn from_u16(_num: u16) -> Option<Self> { todo!() }
 		fn as_u16(&self) -> u16 { todo!() }
 	}
 
-	#[derive(Debug)]
-	struct Data;
-
-	impl<B> request::Request<Action, B> for TestReq {
+	impl Request for TestReq {
+		type Action = Action;
 		type Response = TestResp;
 		type Error = Error;
 
 		const ACTION: Action = Action::Empty;
 	}
 
-	impl request::Request<Action, PlainBytes> for TestReq2 {
+	impl Request for TestReq2 {
+		type Action = Action;
 		type Response = TestResp;
 		type Error = Error;
 
 		const ACTION: Action = Action::Empty;
 	}
 
-	impl<B> request::RawRequest<Action, B> for TestReq {
-		type Response = TestResp;
-		type Error = Error;
-
-		const ACTION: Action = Action::Empty;
+	#[api(TestReq)]
+	async fn test(req: TestReq) -> Result<TestResp, Error> {
+		println!("req {:?}", req);
+		Ok(TestResp {
+			hi: req.hello
+		})
 	}
 
-	// impl<B> Response<Action, B> for TestResp {
-	// 	fn into_message(self) -> Result<Message<Action, B>> { todo!() }
-	// 	fn from_message(_msg: Message<Action, B>) -> Result<Self> { todo!() }
-	// }
-
-	request_handler! {
-		async fn test<Action>(
-			req: TestReq,
-			data: &Data
-		) -> Result<TestResp, Error> {
-			println!("req {:?} data {:?}", req, data);
-			Ok(TestResp {
-				hi: req.hello
-			})
-		}
-	}
-
-	request_handler! {
-		async fn test_2<Action, PlainBytes>(
-			req: TestReq2,
-			data: &Data
-		) -> Result<TestResp, Error> {
-			println!("req {:?} data {:?}", req, data);
-			Ok(TestResp {
-				hi: req.hello
-			})
-		}
-	}
-
-	raw_request_handler! {
-		async fn test_3<Action>(
-			req: TestReq,
-			data: &Data
-		) -> Result<TestResp, Error> {
-			println!("req {:?} data {:?}", req, data);
-			Ok(TestResp {
-				hi: req.hello
-			})
-		}
+	#[api(TestReq2)]
+	async fn test_2(
+		req: TestReq2
+	) -> Result<TestResp, Error> {
+		println!("req {:?}", req);
+		Ok(TestResp {
+			hi: req.hello
+		})
 	}
 }

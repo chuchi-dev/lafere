@@ -1,5 +1,6 @@
 [workspace]
 members = [
 	"fire-stream",
-	"fire-stream-api"
+	"fire-stream-api",
+	"fire-stream-api-codegen"
 ]

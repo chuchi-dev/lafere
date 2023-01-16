@@ -9,7 +9,7 @@ mod listener;
 pub(crate) use timeout::TimeoutReader;
 pub use poll_fn::{poll_fn, PollFn};
 pub use pinned_future::PinnedFuture;
-pub use listener::{Listener, ListenerExt};
+pub use listener::{SocketAddr, Listener, ListenerExt};
 
 use tokio::io::{AsyncRead, AsyncWrite};
 

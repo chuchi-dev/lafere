@@ -1,28 +1,36 @@
-use crate::error::ApiError;
-use crate::message::SerdeMessage;
+use crate::message::{Message, Action};
+use crate::error::{Error, ApiError};
+use crate::server::{Data, Session};
 
-use serde::{Serialize, de::DeserializeOwned};
+use stream::util::PinnedFuture;
+
 
 /// Basic request definition.
-/// 
-/// The request will be serialized and deserialized
-/// via Json to ease updating structures without breaking backwards
-/// compatibility.
-pub trait Request<A, B>: Serialize + DeserializeOwned {
-	type Response: Serialize + DeserializeOwned;
+pub trait Request {
+	type Action: Action;
+	type Response;
 	type Error: ApiError;
-	const ACTION: A;
+
+	const ACTION: Self::Action;
 }
 
-/// Request and Response Definition which does not necessariliy implement
-/// serialize and deserialize.
-///
-/// However the error variant will always be serialized or deserialized.
-/// 
-/// If you wan't to use serde itself use the macro, derive_serde_message!(Type);
-pub trait RawRequest<A, B>: SerdeMessage<A, B, Self::Error> {
-	type Response: SerdeMessage<A, B, Self::Error>;
+pub trait RequestHandler<B> {
+	type Action: Action;
 
-	type Error: ApiError;
-	const ACTION: A;
+	fn action() -> Self::Action
+	where Self: Sized;
+
+	/// if the data is not available just panic
+	fn validate_data(&self, data: &Data);
+
+	/// handles a message with Self::ACTION as action.
+	/// 
+	/// if None is returned the request is abandoned and
+	/// the requestor receives a RequestDropped error
+	fn handle<'a>(
+		&'a self,
+		msg: Message<Self::Action, B>,
+		data: &'a Data,
+		session: &'a Session
+	) -> PinnedFuture<'a, Result<Message<Self::Action, B>, Error>>;
 }

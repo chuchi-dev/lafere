@@ -1,52 +1,50 @@
+use std::fmt;
+use std::error::Error as StdError;
+use std::borrow::Cow;
 
-use std::fmt::{Debug, Display};
+pub use stream::error::RequestError;
 
-use serde::{Serialize, de::DeserializeOwned};
-
-/// Basic error trait which implements Debug + Display + Serialize
-/// 
-/// The usefulness is still undecided
-pub trait Error: Debug + Display + Serialize {}
-
-impl<T> Error for T
-where T: Debug + Display + Serialize {}
 
 /// The error that is sent if something goes wrong while responding
 /// to a request.
-/// ## Panics
-/// If deserialization or serialization failes
-/// this will result in a panic
-pub trait ApiError: Debug + Display + Serialize + DeserializeOwned {
+pub trait ApiError: StdError {
+	fn from_request_error(e: RequestError) -> Self;
 
-	fn connection_closed() -> Self;
-
-	// 
-	fn request_dropped() -> Self;
-
-	/// ## Server
-	/// Get's called if the data that is needed for the request was not
-	/// found.
-	/// 
-	/// Or if the response could not be serialized.
-	fn internal<E: Error>(error: E) -> Self;
-
-	/// ## Server
-	/// If the server receives an error as a request.
-	/// This *should never happen*.
-	/// 
-	/// If the request could not be serialized.
-	/// 
-	/// ## Client
-	/// Get's called when a request could not be serialized.
-	fn request<E: Error>(error: E) -> Self;
-
-	/// ## Client
-	/// Get's called when an response from the server could not be 
-	/// deserialized.
-	fn response<E: Error>(error: E) -> Self;
-
-	/// ## Client
-	/// Get's called if a StreamError occured which is not classified
-	fn other<E: Error>(other: E) -> Self;
-
+	fn from_message_error(e: MessageError) -> Self;
 }
+
+
+#[derive(Debug)]
+pub enum Error {
+	MessageError(MessageError)
+}
+
+impl From<MessageError> for Error {
+	fn from(e: MessageError) -> Self {
+		Self::MessageError(e)
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fmt::Debug::fmt(self, fmt)
+	}
+}
+
+impl StdError for Error {}
+
+#[derive(Debug)]
+pub enum MessageError {
+	#[cfg(feature = "json")]
+	Json(serde_json::Error),
+	// Protobuf
+	Other(Cow<'static, str>)
+}
+
+impl fmt::Display for MessageError {
+	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fmt::Debug::fmt(self, fmt)
+	}
+}
+
+impl StdError for MessageError {}

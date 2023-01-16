@@ -21,13 +21,14 @@ pub(crate) mod builder;
 pub type Result<T> = std::result::Result<T, PacketError>;
 
 use std::fmt;
+use std::borrow::Cow;
 
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum PacketError {
-	Header(String),
-	Body(String),
+	Header(Cow<'static, str>),
+	Body(Cow<'static, str>),
 	#[cfg(feature = "json")]
 	#[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 	Json(serde_json::Error),

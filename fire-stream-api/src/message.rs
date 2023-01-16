@@ -1,27 +1,25 @@
+use crate::error::MessageError;
 
-use crate::error::ApiError;
+use std::fmt::Debug;
+use std::hash::Hash;
 
 use stream::packet::{
 	self, Flags, Packet,
 	PacketHeader, BodyBytes, BodyBytesMut, PacketError
 };
-pub use stream::packet::{PlainBytes, PacketBytes};
-#[cfg(feature = "encrypted")]
-pub use stream::packet::EncryptedBytes;
-
-use std::fmt::Debug;
-use std::hash::Hash;
+pub use stream::packet::PacketBytes;
 
 use bytes::{Bytes, BytesMut, BytesRead, BytesWrite};
 
-/// the number zero is not allowed to be used
+
+/// ## Important
+/// the number *zero* is not allowed to be used
 pub trait Action: Debug + Copy + Eq + Hash {
-	/// returns an Action that will never be returned
-	fn empty() -> Self;
 	/// should try to convert an u16 to the action
 	/// 
 	/// 0 will never be passed as num
 	fn from_u16(num: u16) -> Option<Self>;
+
 	fn as_u16(&self) -> u16;
 
 	fn max_body_size(_header: &Header<Self>) -> Option<u32> {
@@ -29,99 +27,16 @@ pub trait Action: Debug + Copy + Eq + Hash {
 	}
 }
 
-
-#[derive(Debug)]
-pub struct Header<A> {
-	body_len: u32,
-	flags: Flags,
-	success: bool,
-	id: u32,
-	action: A
+pub trait IntoMessage<A, B> {
+	fn into_message(self) -> Result<Message<A, B>, MessageError>;
 }
 
-impl<A> Header<A>
-where A: Action {
-
-	pub fn empty() -> Self {
-		Self {
-			body_len: 0,
-			flags: Flags::empty(),
-			success: true,
-			id: 0,
-			action: A::empty()
-		}
-	}
-
-	pub fn to_bytes(&self, mut bytes: BytesMut) {
-		bytes.write_u32(self.body_len);
-		bytes.write_u8(self.flags.as_u8());
-		bytes.write_u8(self.success as u8);
-		bytes.write_u32(self.id);
-		bytes.write_u16(self.action.as_u16());
-	}
-
-	pub fn set_action(&mut self, action: A) {
-		self.action = action;
-	}
-
+pub trait FromMessage<A, B>: Sized {
+	fn from_message(msg: Message<A, B>) -> Result<Self, MessageError>;
 }
 
-impl<A> PacketHeader for Header<A>
-where A: Action {
-	fn len() -> usize {
-		4 + 1 + 1 + 4 + 2
-	}
 
-	fn from_bytes(mut bytes: Bytes) -> packet::Result<Self> {
-		let me = Self {
-			body_len: bytes.read_u32(),
-			flags: Flags::from_u8(bytes.read_u8())?,
-			success: bytes.read_u8() == 1,
-			id: bytes.read_u32(),
-			action: {
-				let action_num = bytes.read_u16();
-				// if the action is empty create an empty action
-				// instead of rellying on the Action implementation
-				if action_num == 0 {
-					A::empty()
-				} else {
-					A::from_u16(action_num)
-						.ok_or_else(|| PacketError::Header("Action unknown".into()))?
-				}
-			}
-		};
-
-		if let Some(max) = A::max_body_size(&me) {
-			if me.body_len > max {
-				return Err(PacketError::Body("body to big".into()))
-			}
-		}
-
-		Ok(me)
-	}
-
-	fn body_len(&self) -> usize {
-		self.body_len as usize
-	}
-
-	fn flags(&self) -> &Flags {
-		&self.flags
-	}
-
-	fn set_flags(&mut self, flags: Flags) {
-		self.flags = flags;
-	}
-
-	fn id(&self) -> u32 {
-		self.id
-	}
-
-	fn set_id(&mut self, id: u32) {
-		self.id = id;
-	}
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Message<A, B> {
 	header: Header<A>,
 	bytes: B
@@ -139,28 +54,12 @@ where
 
 impl<A, B> Message<A, B>
 where B: PacketBytes {
-
-	// #[cfg(feature = "json")]
-	// pub fn serialize<S: ?Sized>(value: &S) -> Result<Self, E>
-	// where S: serde::Serialize {
-	// 	let mut me = Self::new();
-	// 	me.bytes.body_mut().serialize(value)?;
-	// 	Ok(me)
-	// }
-
-	// #[cfg(feature = "json")]
-	// pub fn deserialize<D>(&self) -> crate::Result<D>
-	// where D: serde::de::DeserializeOwned {
-	// 	self.bytes.body().deserialize()
-	// 		.map_err(Into::into)
-	// }
-
 	pub fn set_success(&mut self, success: bool) {
-		self.header.success = success;
+		self.header.msg_flags.set_success(success);
 	}
 
 	pub fn is_success(&self) -> bool {
-		self.header.success
+		self.header.msg_flags.is_success()
 	}
 
 	pub fn body(&self) -> BodyBytes<'_> {
@@ -173,8 +72,23 @@ where B: PacketBytes {
 }
 
 impl<A, B> Message<A, B> {
-	pub fn action(&self) -> &A {
-		&self.header.action
+	pub fn action(&self) -> Option<&A> {
+		match &self.header.action {
+			MaybeAction::Action(a) => Some(a),
+			_ => None
+		}
+	}
+}
+
+impl<A, B> IntoMessage<A, B> for Message<A, B> {
+	fn into_message(self) -> Result<Self, MessageError> {
+		Ok(self)
+	}
+}
+
+impl<A, B> FromMessage<A, B> for Message<A, B> {
+	fn from_message(me: Self) -> Result<Self, MessageError> {
+		Ok(me)
 	}
 }
 
@@ -196,7 +110,7 @@ where
 	fn empty() -> Self {
 		Self {
 			header: Self::Header::empty(),
-			bytes: B::new(Self::Header::len())
+			bytes: B::new(Self::Header::LEN as usize)
 		}
 	}
 
@@ -204,6 +118,7 @@ where
 		bytes: B,
 		header: Self::Header
 	) -> packet::Result<Self> {
+		// todo probably check if the action is correct
 		Ok(Self { header, bytes })
 	}
 
@@ -215,90 +130,194 @@ where
 	}
 }
 
-/// Means SerializeDeserialize Message
-pub trait SerdeMessage<A, B, E: ApiError>: Sized {
-
-	/// You should never return a Message which has a status of !success
-	/// 
-	/// ## Note
-	/// The action and the success flag/states will automatically be set
-	fn into_message(self) -> Result<Message<A, B>, E>
-	where B: PacketBytes;
-
-	/// you will never receive a Message with a status of !success
-	/// 
-	/// ## Note
-	/// The action will always match
-	fn from_message(msg: Message<A, B>) -> Result<Self, E>
-	where B: PacketBytes;
-
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Header<A> {
+	body_len: u32,
+	flags: Flags,
+	msg_flags: MessageFlags,
+	id: u32,
+	action: MaybeAction<A>
 }
 
-/// Helps to implement SerdeMessage with the default serde traits.
-/// 
-/// ```
-/// # use fire_stream_api as stream_api;
-/// use stream_api::derive_serde_message;
-/// 
-/// use serde::{Serialize, Deserialize};
-/// 
-/// #[derive(Debug, Clone, Serialize, Deserialize)]
-/// pub struct Request {
-/// 	name: String
-/// }
-/// 
-/// derive_serde_message!(Request);
-/// ```
-#[macro_export]
-macro_rules! derive_serde_message {
-	($type:ty) => (
-		impl<A, B, E> $crate::message::SerdeMessage<A, B, E> for $type
-		where
-			A: $crate::message::Action,
-			E: $crate::error::ApiError
-		{
-
-			fn into_message(
-				self
-			) -> std::result::Result<$crate::message::Message<A, B>, E>
-			where B: $crate::message::PacketBytes {
-				let mut msg = $crate::message::Message::new();
-				msg.body_mut()
-					.serialize(&self)
-					.map_err(|e| E::request(
-						format!("malformed request: {}", e)
-					))?;
-				Ok(msg)
-			}
-
-			fn from_message(
-				msg: $crate::message::Message<A, B>
-			) -> std::result::Result<Self, E>
-			where B: $crate::message::PacketBytes {
-				msg.body().deserialize()
-					.map_err(|e| E::response(
-						format!("malformed response: {}", e)
-					))
-			}
-
+impl<A> Header<A>
+where A: Action {
+	pub fn empty() -> Self {
+		Self {
+			body_len: 0,
+			flags: Flags::empty(),
+			msg_flags: MessageFlags::new(true),
+			id: 0,
+			action: MaybeAction::None
 		}
-	)
+	}
+
+	pub fn to_bytes(&self, mut bytes: BytesMut) {
+		bytes.write_u32(self.body_len);
+		bytes.write_u8(self.flags.as_u8());
+		bytes.write_u8(self.msg_flags.as_u8());
+		bytes.write_u32(self.id);
+		bytes.write_u16(self.action.as_u16());
+	}
+
+	pub fn set_action(&mut self, action: A) {
+		self.action = MaybeAction::Action(action);
+	}
 }
 
-derive_serde_message!(());
+impl<A> PacketHeader for Header<A>
+where A: Action {
+	const LEN: u32 = 4 + 1 + 1 + 4 + 2;
+
+	fn from_bytes(mut bytes: Bytes) -> packet::Result<Self> {
+		let me = Self {
+			body_len: bytes.read_u32(),
+			flags: Flags::from_u8(bytes.read_u8())?,
+			msg_flags: MessageFlags::from_u8(bytes.read_u8()),
+			id: bytes.read_u32(),
+			action: {
+				let action_num = bytes.read_u16();
+				if action_num == 0 {
+					MaybeAction::None
+				} else if let Some(action) = A::from_u16(action_num) {
+					// we don't return an error here
+					// since we wan't to get the package
+					// and can still discard it later
+					// this allows the connection to continue to exist
+					// without closing it
+					MaybeAction::Action(action)
+				} else {
+					MaybeAction::Unknown(action_num)
+				}
+			}
+		};
+
+		if let Some(max) = A::max_body_size(&me) {
+			if me.body_len > max {
+				return Err(PacketError::BodyLimitReached(max))
+			}
+		}
+
+		Ok(me)
+	}
+
+	fn body_len(&self) -> u32 {
+		self.body_len
+	}
+
+	fn flags(&self) -> &Flags {
+		&self.flags
+	}
+
+	fn set_flags(&mut self, flags: Flags) {
+		self.flags = flags;
+	}
+
+	fn id(&self) -> u32 {
+		self.id
+	}
+
+	fn set_id(&mut self, id: u32) {
+		self.id = id;
+	}
+}
+
+/// In bits
+/// +----------+---------+
+/// | reserved | success |
+/// +----------+---------+
+/// |    7     |    1    |
+/// +----------+---------+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct MessageFlags {
+	inner: u8
+}
+
+impl MessageFlags {
+	pub fn new(success: bool) -> Self {
+		let mut me = Self { inner: 0 };
+		me.set_success(success);
+
+		me
+	}
+
+	pub fn from_u8(inner: u8) -> Self {
+		Self { inner }
+	}
+
+	pub fn is_success(&self) -> bool {
+		self.inner & 0b0000_0001 != 0
+	}
+
+	pub fn set_success(&mut self, success: bool) {
+		self.inner |= success as u8;
+	}
+
+	pub fn as_u8(&self) -> u8 {
+		self.inner
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum MaybeAction<A> {
+	Action(A),
+	/// zero will never be here
+	Unknown(u16),
+	/// Represented as 0
+	None
+}
+
+impl<A> MaybeAction<A>
+where A: Action {
+	pub fn as_u16(&self) -> u16 {
+		match self {
+			Self::Action(a) => a.as_u16(),
+			Self::Unknown(u) => *u,
+			Self::None => 0
+		}
+	}
+}
 
 #[cfg(test)]
 mod tests {
-	use crate::derive_serde_message;
+	use super::*;
 
-	use serde::{Serialize, Deserialize};
+	use stream::packet::PlainBytes;
 
-	#[derive(Debug, Clone, Serialize, Deserialize)]
-	struct Request {
-		name: String
+	#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+	enum SomeAction {
+		One,
+		Two
 	}
 
-	derive_serde_message!(Request);
+	impl Action for SomeAction {
+		fn from_u16(num: u16) -> Option<Self> {
+			match num {
+				1 => Some(Self::One),
+				2 => Some(Self::Two),
+				_ => None
+			}
+		}
 
+		fn as_u16(&self) -> u16 {
+			match self {
+				Self::One => 1,
+				Self::Two => 2
+			}
+		}
+	}
 
+	#[test]
+	fn msg_from_to_bytes() {
+		let mut msg = Message::<_, PlainBytes>::new();
+		msg.header_mut().set_action(SomeAction::Two);
+		msg.body_mut().write_u16(u16::MAX);
+
+		let bytes = msg.clone().into_bytes();
+		let header = Header::from_bytes(bytes.header()).unwrap();
+		let n_msg = Message::from_bytes_and_header(bytes, header).unwrap();
+		assert_eq!(msg.action(), n_msg.action());
+		assert_eq!(msg.header().flags(), n_msg.header().flags());
+
+		assert_eq!(n_msg.body().read_u16(), u16::MAX);
+	}
 }
