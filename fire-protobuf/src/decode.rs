@@ -479,8 +479,9 @@ mod tests {
 
 		let packed = parser.next().unwrap().unwrap();
 		assert_eq!(packed.number, 6);
-		let FieldKind::Len(packed) = packed.kind else {
-			panic!();
+		let packed = match packed.kind {
+			FieldKind::Len(p) => p,
+			_ => panic!()
 		};
 
 		let mut parser = MessageDecoder::new(packed);

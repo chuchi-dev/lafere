@@ -39,8 +39,12 @@ impl FieldAttr {
 			}
 		}
 
-		let Some(fieldnum) = fieldnum else {
-			return Err(Error::new(Span::call_site(), "expected #[field(..)]"))
+		let fieldnum = match fieldnum {
+			Some(f) => f,
+			None => return Err(Error::new(
+				Span::call_site(),
+				"expected #[field(..)]"
+			))
 		};
 
 		if fieldnum.base10_digits() == "0" {
