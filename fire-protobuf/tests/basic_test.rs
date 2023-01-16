@@ -29,17 +29,21 @@ struct Test2 {
 ///			String one = 1;
 /// 	}
 /// }
-#[derive(Debug, Default, PartialEq, Eq, EncodeMessage, DecodeMessage)]
+#[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
 enum Test3 {
 	#[field(1)]
 	One(String),
-	#[default]
 	#[field(2)]
 	Two
 }
 
+impl Default for Test3 {
+	fn default() -> Self {
+		Self::Two
+	}
+}
 
-#[derive(Debug, Default, PartialEq, Eq, EncodeMessage, DecodeMessage)]
+#[derive(Debug, num_enum::Default, PartialEq, Eq, EncodeMessage, DecodeMessage)]
 #[repr(i32)]
 enum Test4 {
 	#[default]
