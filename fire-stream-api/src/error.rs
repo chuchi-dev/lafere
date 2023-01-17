@@ -15,6 +15,7 @@ pub trait ApiError: StdError {
 
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
 	MessageError(MessageError)
 }
@@ -34,10 +35,15 @@ impl fmt::Display for Error {
 impl StdError for Error {}
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum MessageError {
 	#[cfg(feature = "json")]
 	Json(serde_json::Error),
 	// Protobuf
+	#[cfg(feature = "protobuf")]
+	EncodeError(fire_protobuf::encode::EncodeError),
+	#[cfg(feature = "protobuf")]
+	DecodeError(fire_protobuf::decode::DecodeError),
 	Other(Cow<'static, str>)
 }
 

@@ -15,6 +15,7 @@ required-features = ["encrypted"]
 [features]
 encrypted = ["crypto", "stream/encrypted"]
 json = ["stream/json", "serde", "serde_json"]
+protobuf = ["fire-protobuf"]
 
 [dependencies]
 stream = { package = "fire-stream", version = "0.3", path = "./../fire-stream" }
@@ -25,6 +26,8 @@ codegen = { package = "fire-stream-api-codegen", version = "0.1", path  = "./../
 
 serde = { version = "1.0", optional = true }
 serde_json = { version = "1.0", optional = true }
+
+fire-protobuf = { version = "0.1", path = "./../fire-protobuf", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["net", "io-util", "rt-multi-thread", "time", "macros", "sync"] }

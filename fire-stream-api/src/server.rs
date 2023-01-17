@@ -388,3 +388,28 @@ mod json_tests {
 		})
 	}
 }
+
+
+#[cfg(all(test, feature = "protobuf"))]
+mod protobuf_tests {
+	use codegen::{IntoMessage, FromMessage};
+
+	use fire_protobuf::{EncodeMessage, DecodeMessage};
+
+
+	#[derive(Debug, Default)]
+	#[derive(EncodeMessage, DecodeMessage, IntoMessage, FromMessage)]
+	#[message(protobuf)]
+	struct TestReq {
+		#[field(1)]
+		hello: u64
+	}
+
+	#[derive(Debug, Default)]
+	#[derive(EncodeMessage, DecodeMessage, IntoMessage, FromMessage)]
+	#[message(protobuf)]
+	struct TestReq2 {
+		#[field(1)]
+		hello: u64
+	}
+}
