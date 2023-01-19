@@ -2,10 +2,14 @@
 //!
 //! Using fire stream as the communication protocol.
 
+#[cfg(feature = "connection")]
 pub mod util;
 pub mod message;
+#[cfg(feature = "connection")]
 pub mod request;
+#[cfg(feature = "connection")]
 pub mod client;
+#[cfg(feature = "connection")]
 pub mod server;
 pub mod encdec;
 pub mod error;

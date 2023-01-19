@@ -3,13 +3,12 @@ use crate::packet::PacketError;
 use std::{io, fmt};
 use std::error::Error;
 
-use tokio::task;
-
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum TaskError {
-	Join(task::JoinError),
+	#[cfg(feature = "connection")]
+	Join(tokio::task::JoinError),
 	Io(io::Error),
 	/// Reading a packet failed
 	Packet(PacketError),

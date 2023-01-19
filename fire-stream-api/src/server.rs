@@ -257,6 +257,7 @@ where
 }
 
 #[cfg(feature = "encrypted")]
+#[cfg_attr(docsrs, doc(cfg(feature = "encrypted")))]
 impl<A, L> Server<A, EncryptedBytes, L, Keypair>
 where
 	A: Action,

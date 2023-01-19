@@ -1,4 +1,5 @@
 #[cfg(feature = "json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 pub mod json {
 	use crate::error::MessageError;
 	use crate::message::{Message, Action, PacketBytes};
@@ -32,6 +33,7 @@ pub mod json {
 }
 
 #[cfg(feature = "protobuf")]
+#[cfg_attr(docsrs, doc(cfg(feature = "protobuf")))]
 pub mod protobuf {
 	use crate::error::MessageError;
 	use crate::message::{Message, Action, PacketBytes};

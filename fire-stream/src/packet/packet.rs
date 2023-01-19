@@ -86,6 +86,7 @@ macro_rules! kind {
 				}
 			}
 
+			#[cfg_attr(not(feature = "connection"), allow(dead_code))]
 			pub(crate) fn to_str(&self) -> &'static str {
 				match self {
 					$(Self::$variant => stringify!($variant)),*,
@@ -132,6 +133,7 @@ pub struct Flags {
 }
 
 impl Flags {
+	#[cfg_attr(not(feature = "connection"), allow(dead_code))]
 	pub(crate) fn new(kind: Kind) -> Self {
 		let mut this = Self { inner: 0 };
 		this.set_kind(kind);

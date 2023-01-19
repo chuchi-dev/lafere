@@ -78,6 +78,7 @@ impl PacketBytes for PlainBytes {
 }
 
 impl PlainBytes {
+	#[cfg_attr(not(feature = "connection"), allow(dead_code))]
 	pub(crate) fn as_slice(&self) -> &[u8] {
 		&*self.bytes
 	}

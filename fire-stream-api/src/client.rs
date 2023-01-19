@@ -35,6 +35,7 @@ where A: Action + Send + 'static {
 }
 
 #[cfg(feature = "encrypted")]
+#[cfg_attr(docsrs, doc(cfg(feature = "encrypted")))]
 impl<A> Client<A, EncryptedBytes>
 where A: Action + Send + 'static {
 	pub fn new_encrypted<S>(

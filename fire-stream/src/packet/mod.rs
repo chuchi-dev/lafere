@@ -16,6 +16,7 @@ mod encrypted_bytes;
 #[cfg_attr(docsrs, doc(cfg(feature = "encrypted")))]
 pub use encrypted_bytes::*;
 
+#[cfg(feature = "connection")]
 pub(crate) mod builder;
 
 pub type Result<T> = std::result::Result<T, PacketError>;
