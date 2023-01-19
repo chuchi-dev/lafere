@@ -22,9 +22,13 @@ jobs:
         with:
           toolchain: ${{ env.rust_min }}
           override: true
+      - name: Build no features
+        run: cargo build --no-default-features
+      - name: Run tests no features
+        run: cargo test --no-default-features
       - name: Build
         run: cargo build
-      - name: Run tests
+      - name: Run
         run: cargo test
       - name: Build all features
         run: cargo build --all-features
