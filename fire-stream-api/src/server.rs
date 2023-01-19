@@ -63,7 +63,6 @@ struct Requests<A, B> {
 
 impl<A, B> Requests<A, B>
 where A: Action {
-
 	fn new() -> Self {
 		Self {
 			inner: HashMap::new()
@@ -93,10 +92,7 @@ pub struct Server<A, B, L, More> {
 }
 
 impl<A, B, L, More> Server<A, B, L, More>
-where
-	A: Action,
-	L: Listener
-{
+where A: Action {
 	pub fn register_request<H>(&mut self, handler: H)
 	where H: RequestHandler<B, Action=A> + Send + Sync + 'static {
 		handler.validate_data(&self.data);
@@ -107,7 +103,13 @@ where
 	where D: Any + Send + Sync {
 		self.data.insert(data);
 	}
+}
 
+impl<A, B, L, More> Server<A, B, L, More>
+where
+	A: Action,
+	L: Listener
+{
 	async fn run_raw<F>(self, new_connection: F) -> io::Result<()>
 	where
 		A: Action + Send + Sync + 'static,
