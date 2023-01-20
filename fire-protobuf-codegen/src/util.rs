@@ -68,16 +68,6 @@ pub(crate) fn variants_no_fields(
 				e => return Err(Error::new_spanned(e, "expected = int"))
 			};
 
-			let is_default = has_default_attr(&v.attrs);
-			let fieldnum_zero = fieldnum.base10_digits() == "0";
-
-			if is_default != fieldnum_zero {
-				return Err(Error::new_spanned(
-					v.ident,
-					"expected number zero and a default attribute"
-				))
-			}
-
 			let ident = v.ident;
 
 			if !matches!(v.fields, Fields::Unit) {
@@ -96,22 +86,21 @@ pub(crate) fn variants_no_fields(
 		})?;
 	let default_variant = variants.remove(default_variant);
 
-	// this should never happen since we check that if the value is 0
-	// the default attr is set
-	// which should only be able to be set once
-	assert!(!variants.iter().any(|(num, _)| num.base10_digits() == "0"));
+	let has_still_default = variants.iter()
+		.any(|(num, _)| num.base10_digits() == "0");
 
-	Ok((variants, default_variant))
-}
-
-fn has_default_attr(attrs: &[Attribute]) -> bool {
-	attrs.iter().any(|a| a.path.is_ident("default"))
+	if has_still_default {
+		Err(Error::new(Span::call_site(), "only one variant can be default = \
+			0"))
+	} else {
+		Ok((variants, default_variant))
+	}
 }
 
 pub(crate) fn variants_with_fields(
 	variants: Punctuated<Variant, Comma>
 ) -> Result<Vec<(FieldAttr, Ident, Option<Field>)>> {
-	variants.into_iter()
+	let v = variants.into_iter()
 		.map(|v| {
 			let attr = FieldAttr::from_attrs(&v.attrs)?;
 
@@ -137,5 +126,19 @@ pub(crate) fn variants_with_fields(
 
 			Ok((attr, ident, field))
 		})
-		.collect()
+		.collect::<Result<Vec<_>>>()?;
+
+	let defaults = v.iter()
+		.filter(|(attr, _, _)| attr.default.is_some())
+		.count();
+
+	if defaults == 0 {
+		Err(Error::new(Span::call_site(), "one variant needs to the \
+			default have #[field(num, default)]"))
+	} else if defaults > 1 {
+		Err(Error::new(Span::call_site(), "only one variant can be the \
+			default"))
+	} else {
+		Ok(v)
+	}
 }

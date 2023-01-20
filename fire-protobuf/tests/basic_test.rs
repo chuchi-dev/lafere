@@ -5,7 +5,7 @@ use fire_protobuf::encode::EncodeMessage;
 use fire_protobuf::decode::DecodeMessage;
 
 
-#[derive(Debug, Default, PartialEq, Eq, EncodeMessage, DecodeMessage)]
+#[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
 struct Test1 {
 	#[field(1)]
 	s: String,
@@ -13,7 +13,7 @@ struct Test1 {
 	some_struct: Test2
 }
 
-#[derive(Debug, Default, PartialEq, Eq, EncodeMessage, DecodeMessage)]
+#[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
 struct Test2 {
 	#[field(1)]
 	nums: Vec<u32>,
@@ -33,20 +33,13 @@ struct Test2 {
 enum Test3 {
 	#[field(1)]
 	One(String),
-	#[field(2)]
+	#[field(2, default)]
 	Two
 }
 
-impl Default for Test3 {
-	fn default() -> Self {
-		Self::Two
-	}
-}
-
-#[derive(Debug, num_enum::Default, PartialEq, Eq, EncodeMessage, DecodeMessage)]
+#[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
 #[repr(i32)]
 enum Test4 {
-	#[default]
 	Unknown = 0,
 	One = 1,
 	Two = 2

@@ -173,19 +173,22 @@ impl<'a> FieldKind<'a> {
 
 
 
-pub trait DecodeMessage<'m>: Default {
+pub trait DecodeMessage<'m> {
 	/// This field is just a hint, merge might accept another type
 	/// 
 	/// mostly this is used for detecting if we can pack a message
 	const WIRE_TYPE: WireType;
 
-	fn parse_from_bytes(b: &'m [u8]) -> Result<Self, DecodeError> {
-		let mut this = Self::default();
+	fn parse_from_bytes(b: &'m [u8]) -> Result<Self, DecodeError>
+	where Self: Sized {
+		let mut this = Self::decode_default();
 
 		this.merge(FieldKind::Len(b), false)?;
 
 		Ok(this)
 	}
+
+	fn decode_default() -> Self;
 
 	/// kind does not need to be the same as Self::WIRE_TYPE
 	/// 
@@ -206,6 +209,10 @@ where T: for<'m> DecodeMessage<'m> {}
 impl<'m, V> DecodeMessage<'m> for Vec<V>
 where V: DecodeMessage<'m> {
 	const WIRE_TYPE: WireType = WireType::Len;
+
+	fn decode_default() -> Self {
+		Self::new()
+	}
 
 	fn merge(
 		&mut self,
@@ -234,7 +241,7 @@ where V: DecodeMessage<'m> {
 		if kind.is_len() && V::WIRE_TYPE.can_be_packed() {
 			let mut parser = MessageDecoder::try_from_kind(kind)?;
 			while let Some(k) = parser.maybe_next_kind(V::WIRE_TYPE)? {
-				let mut v = V::default();
+				let mut v = V::decode_default();
 				v.merge(k, false)?;
 
 				self.push(v);
@@ -244,7 +251,7 @@ where V: DecodeMessage<'m> {
 		}
 
 
-		let mut v = V::default();
+		let mut v = V::decode_default();
 		v.merge(kind, false)?;
 
 		self.push(v);
@@ -255,6 +262,10 @@ where V: DecodeMessage<'m> {
 
 impl<'m> DecodeMessage<'m> for Vec<u8> {
 	const WIRE_TYPE: WireType = WireType::Len;
+
+	fn decode_default() -> Self {
+		Self::new()
+	}
 
 	fn merge(
 		&mut self,
@@ -271,6 +282,10 @@ impl<'m> DecodeMessage<'m> for Vec<u8> {
 
 impl<'m> DecodeMessage<'m> for String {
 	const WIRE_TYPE: WireType = WireType::Len;
+
+	fn decode_default() -> Self {
+		Self::new()
+	}
 
 	fn merge(
 		&mut self,
@@ -290,6 +305,10 @@ impl<'m> DecodeMessage<'m> for String {
 impl<'m, V> DecodeMessage<'m> for Option<V>
 where V: DecodeMessage<'m> {
 	const WIRE_TYPE: WireType = WireType::Len;
+
+	fn decode_default() -> Self {
+		None
+	}
 
 	fn merge(
 		&mut self,
@@ -319,7 +338,7 @@ where V: DecodeMessage<'m> {
 				v.merge(kind, false)?;
 			}
 			None => {
-				let mut v = V::default();
+				let mut v = V::decode_default();
 				v.merge(kind, false)?;
 				*self = Some(v);
 			}
@@ -331,6 +350,10 @@ where V: DecodeMessage<'m> {
 
 impl<'m> DecodeMessage<'m> for bool {
 	const WIRE_TYPE: WireType = WireType::Varint;
+
+	fn decode_default() -> Self {
+		false
+	}
 
 	fn merge(
 		&mut self,
@@ -349,6 +372,10 @@ macro_rules! impl_varint {
 	($($ty:ty),*) => ($(
 		impl<'m> DecodeMessage<'m> for $ty {
 			const WIRE_TYPE: WireType = WireType::Varint;
+
+			fn decode_default() -> Self {
+				Default::default()
+			}
 
 			fn merge(
 				&mut self,
@@ -370,6 +397,10 @@ macro_rules! impl_floats {
 	($($src:ident, $wtype:ident as $ty:ty),*) => ($(
 		impl<'m> DecodeMessage<'m> for $ty {
 			const WIRE_TYPE: WireType = WireType::$wtype;
+
+			fn decode_default() -> Self {
+				Default::default()
+			}
 
 			fn merge(
 				&mut self,
@@ -399,6 +430,10 @@ macro_rules! impl_zigzag {
 		impl<'m> DecodeMessage<'m> for ZigZag<$ty> {
 			const WIRE_TYPE: WireType = WireType::Varint;
 
+			fn decode_default() -> Self {
+				Default::default()
+			}
+
 			fn merge(
 				&mut self,
 				kind: FieldKind<'m>,
@@ -424,6 +459,10 @@ macro_rules! impl_fixed {
 	($($src:ident, $wtype:ident as $ty:ty),*) => ($(
 		impl<'m> DecodeMessage<'m> for Fixed<$ty> {
 			const WIRE_TYPE: WireType = WireType::$wtype;
+
+			fn decode_default() -> Self {
+				Default::default()
+			}
 
 			fn merge(
 				&mut self,

@@ -52,15 +52,30 @@ fn expand_struct(
 
 	let dectrait = quote!(#fire_decode::DecodeMessage);
 
-	let merge_fields: Vec<_> = fields.iter()
+	let default_fields = fields.iter()
+		.map(|(_, f)| {
+			let id = &f.ident;
+			quote!(
+				#id: #dectrait::decode_default()
+			)
+		});
+
+	let decode_default = quote!(
+		fn decode_default() -> Self {
+			Self {
+				#(#default_fields),*
+			}
+		}
+	);
+
+	let merge_fields = fields.iter()
 		.map(|(attr, f)| {
 			let id = &f.ident;
 			let fieldnum = &attr.fieldnum;
 			quote!(
 				#fieldnum => #dectrait::merge(&mut self.#id, field.kind, true)?
 			)
-		})
-		.collect();
+		});
 
 
 	let merge = quote!(
@@ -89,6 +104,7 @@ fn expand_struct(
 	Ok(quote!(
 		impl<'m> #dectrait<'m> for #ident {
 			#wire_type_const
+			#decode_default
 			#merge
 		}
 	))
@@ -122,7 +138,6 @@ fn expand_enum_no_fields(
 	// (fieldnum, ident)
 	let (variants, default_variant) = variants_no_fields(d.variants)?;
 	let default_variant = default_variant.1;
-
 
 	let fire = fire_protobuf_crate()?;
 	let fire_decode = quote!(#fire::decode);
@@ -161,6 +176,11 @@ fn expand_enum_no_fields(
 	Ok(quote!(
 		impl<'m> #dectrait<'m> for #ident {
 			#wire_type_const
+
+			fn decode_default() -> Self {
+				Self::#default_variant
+			}
+
 			#merge
 		}
 	))
@@ -178,6 +198,10 @@ fn expand_enum_with_fields(
 
 	// (FieldAttr, ident, Option<field>)
 	let variants = variants_with_fields(d.variants)?;
+	let default_variant = variants.iter()
+		.find(|(attr, _, _)| attr.default.is_some())
+		// variants check that one field is the default
+		.unwrap();
 
 	let fire = fire_protobuf_crate()?;
 	let fire_decode = quote!(#fire::decode);
@@ -189,6 +213,25 @@ fn expand_enum_with_fields(
 	);
 
 	let dectrait = quote!(#fire_decode::DecodeMessage);
+
+	let default_variant = {
+		let (_, ident, field) = default_variant;
+
+		if let Some(_) = field {
+			quote!(
+				Self::#ident(#dectrait::decode_default())
+			)
+		} else {
+			quote!(Self::#ident)
+		}
+	};
+
+	let decode_default = quote!(
+		fn decode_default() -> Self {
+			#default_variant
+		}
+	);
+
 
 	let match_fields: Vec<_> = variants.iter()
 		.map(|(attr, ident, field)| {
@@ -237,6 +280,7 @@ fn expand_enum_with_fields(
 	Ok(quote!(
 		impl<'m> #dectrait<'m> for #ident {
 			#wire_type_const
+			#decode_default
 			#merge
 		}
 	))

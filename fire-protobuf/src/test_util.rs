@@ -60,6 +60,10 @@ impl<'m, T> DecodeMessage<'m> for Wrapper<T>
 where T: DecodeMessage<'m> {
 	const WIRE_TYPE: WireType = WireType::Len;
 
+	fn decode_default() -> Self {
+		Self(T::decode_default())
+	}
+
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,

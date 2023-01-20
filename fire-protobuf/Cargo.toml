@@ -14,5 +14,3 @@ codegen = { package = "fire-protobuf-codegen", version = "0.1", path = "../fire-
 
 [dev-dependencies]
 hex-literal = "0.3"
-# used because Default enum was stabilized 1.62
-num_enum = "0.5"
