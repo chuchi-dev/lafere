@@ -17,6 +17,7 @@ pub enum DecodeError {
 	ExpectedI64WireType,
 	ExpectedLenWireType,
 	ExpectedUtf8,
+	ExpectedArrayLen(usize),
 	Other(String)
 }
 
@@ -275,6 +276,30 @@ impl<'m> DecodeMessage<'m> for Vec<u8> {
 		let bytes = kind.try_unwrap_len()?;
 		self.clear();
 		self.extend_from_slice(bytes);
+
+		Ok(())
+	}
+}
+
+impl<'m, const S: usize> DecodeMessage<'m> for [u8; S] {
+	const WIRE_TYPE: WireType = WireType::Len;
+
+	fn decode_default() -> Self {
+		[0; S]
+	}
+
+	fn merge(
+		&mut self,
+		kind: FieldKind<'m>,
+		_is_field: bool
+	) -> Result<(), DecodeError> {
+		let bytes = kind.try_unwrap_len()?;
+
+		if bytes.len() != S {
+			return Err(DecodeError::ExpectedArrayLen(S))
+		}
+
+		self.copy_from_slice(bytes);
 
 		Ok(())
 	}

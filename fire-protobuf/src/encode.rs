@@ -237,6 +237,33 @@ where V: EncodeMessage {
 	}
 }
 
+impl<V, const S: usize> EncodeMessage for [V; S]
+where V: EncodeMessage {
+	const WIRE_TYPE: WireType = WireType::Len;
+
+	fn is_default(&self) -> bool {
+		self.is_empty()
+	}
+
+	/// how big will the size be after writing
+	fn encoded_size(
+		&mut self,
+		field: Option<FieldOpt>,
+		builder: &mut SizeBuilder
+	) -> Result<(), EncodeError> {
+		self.as_mut_slice().encoded_size(field, builder)
+	}
+
+	fn encode<B>(
+		&mut self,
+		field: Option<FieldOpt>,
+		encoder: &mut MessageEncoder<B>
+	) -> Result<(), EncodeError>
+	where B: BytesWrite {
+		self.as_mut_slice().encode(field, encoder)
+	}
+}
+
 
 impl<V> EncodeMessage for &mut [V]
 where V: EncodeMessage {
@@ -376,6 +403,32 @@ where V: EncodeMessage {
 }
 
 impl EncodeMessage for Vec<u8> {
+	const WIRE_TYPE: WireType = WireType::Len;
+
+	fn is_default(&self) -> bool {
+		self.as_slice().is_default()
+	}
+
+	/// how big will the size be after writing
+	fn encoded_size(
+		&mut self,
+		field: Option<FieldOpt>,
+		builder: &mut SizeBuilder
+	) -> Result<(), EncodeError> {
+		self.as_slice().encoded_size(field, builder)
+	}
+
+	fn encode<B>(
+		&mut self,
+		field: Option<FieldOpt>,
+		encoder: &mut MessageEncoder<B>
+	) -> Result<(), EncodeError>
+	where B: BytesWrite {
+		self.as_slice().encode(field, encoder)
+	}
+}
+
+impl<const S: usize> EncodeMessage for [u8; S] {
 	const WIRE_TYPE: WireType = WireType::Len;
 
 	fn is_default(&self) -> bool {
