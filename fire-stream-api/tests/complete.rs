@@ -26,13 +26,15 @@ mod api {
 	pub enum Action {
 		Act1 = 1,
 		Act2 = 2,
-		MyAddress = 3
+		MyAddress = 3,
+		AlwaysError = 4
 	}
 
 	#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 	#[derive(IntoMessage, FromMessage)]
 	#[message(json)]
 	pub enum Error {
+		MyError,
 		RequestError(String),
 		MessageError(String)
 	}
@@ -110,6 +112,24 @@ mod api {
 
 		const ACTION: Action = Action::MyAddress;
 	}
+
+	#[derive(Debug, Clone, Serialize, Deserialize, IntoMessage, FromMessage)]
+	#[message(json)]
+	pub struct AlwaysErrorReq;
+
+	#[derive(Debug, Clone, Serialize, Deserialize, IntoMessage, FromMessage)]
+	#[message(json)]
+	pub struct AlwaysError {
+		pub addr: String
+	}
+
+	impl Request for AlwaysErrorReq {
+		type Action = Action;
+		type Response = AlwaysError;
+		type Error = Error;
+
+		const ACTION: Action = Action::AlwaysError;
+	}
 }
 
 mod handlers {
@@ -141,6 +161,11 @@ mod handlers {
 	pub fn my_address(addr: &MyAddr) -> Result<MyAddress> {
 		Ok(MyAddress { addr: addr.0.to_string() })
 	}
+
+	#[api(AlwaysErrorReq)]
+	pub fn always_error() -> Result<AlwaysError> {
+		Err(Error::MyError)
+	}
 }
 
 struct MyAddr(SocketAddr);
@@ -165,6 +190,7 @@ async fn main() {
 		server.register_request(handlers::act_1);
 		server.register_request(handlers::act_2);
 		server.register_request(handlers::my_address);
+		server.register_request(handlers::always_error);
 
 		server.run().await.unwrap();
 	});
@@ -186,6 +212,9 @@ async fn main() {
 
 	let r = client.request(api::MyAddressReq).await.unwrap();
 	assert_eq!(r.addr, addr.to_string());
+
+	let e = client.request(api::AlwaysErrorReq).await.unwrap_err();
+	assert_eq!(e, api::Error::MyError);
 
 	client.close().await.unwrap();
 }

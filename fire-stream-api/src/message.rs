@@ -233,6 +233,8 @@ struct MessageFlags {
 }
 
 impl MessageFlags {
+	const SUCCESS_BIT: u8 = 0b0000_0001;
+
 	pub fn new(success: bool) -> Self {
 		let mut me = Self { inner: 0 };
 		me.set_success(success);
@@ -245,11 +247,15 @@ impl MessageFlags {
 	}
 
 	pub fn is_success(&self) -> bool {
-		self.inner & 0b0000_0001 != 0
+		self.inner & Self::SUCCESS_BIT != 0
 	}
 
 	pub fn set_success(&mut self, success: bool) {
-		self.inner |= success as u8;
+		if success {
+			self.inner |= Self::SUCCESS_BIT;
+		} else {
+			self.inner &= !Self::SUCCESS_BIT;
+		}
 	}
 
 	pub fn as_u8(&self) -> u8 {
