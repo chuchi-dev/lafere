@@ -2,6 +2,8 @@
 //!
 //! Using fire stream as the communication protocol.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 #[cfg(feature = "connection")]
 pub mod util;
 pub mod message;

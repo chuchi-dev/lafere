@@ -20,10 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.rust_min }}
-          override: true
       - name: Build no features
         run: cargo build --no-default-features
       - name: Run tests no features

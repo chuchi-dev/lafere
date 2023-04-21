@@ -18,16 +18,27 @@ use std::io;
 #[cfg(feature = "encrypted")]
 use crypto::signature::Keypair;
 
+#[derive(Debug, Default)]
+#[non_exhaustive]
+pub struct ServerConfig {
+	pub log_errors: bool
+}
 
 pub struct Data {
+	cfg: ServerConfig,
 	inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>
 }
 
 impl Data {
 	fn new() -> Self {
 		Self {
+			cfg: ServerConfig::default(),
 			inner: HashMap::new()
 		}
+	}
+
+	pub fn cfg(&self) -> &ServerConfig {
+		&self.cfg
 	}
 
 	pub fn exists<D>(&self) -> bool
@@ -110,6 +121,12 @@ where
 	A: Action,
 	L: Listener
 {
+	/// If this ist set to true
+	/// errors which are returned in `#[api(*)]` functions are logged to stderr
+	pub fn set_log_errors(&mut self, log: bool) {
+		self.data.cfg.log_errors = log;
+	}
+
 	async fn run_raw<F>(self, new_connection: F) -> io::Result<()>
 	where
 		A: Action + Send + Sync + 'static,
