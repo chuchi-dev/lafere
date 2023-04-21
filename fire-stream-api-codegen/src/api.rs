@@ -163,12 +163,18 @@ pub(crate) fn expand(
 				}
 
 				#fire::util::PinnedFuture::new(async move {
-
 					let r = handle_with_api_err(msg, data, session).await;
 
 					match r {
 						Ok(m) => Ok(m),
 						Err(e) => {
+							if data.cfg().log_errors {
+								eprintln!(concat!(
+									stringify!(#req_ty),
+									" returned error {:?}"
+								), e)
+							}
+
 							<__Error as #into_msg>::into_message(e)
 								.map_err(#fire::error::Error::from)
 						}
