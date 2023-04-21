@@ -176,6 +176,10 @@ pub(crate) fn expand(
 							}
 
 							<__Error as #into_msg>::into_message(e)
+								.map(|mut msg| {
+									msg.set_success(false);
+									msg
+								})
 								.map_err(#fire::error::Error::from)
 						}
 					}
