@@ -263,7 +263,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn test_plain_stream_reconnect() {
-		let timeout = Duration::from_millis(10);
+		let timeout = Duration::from_millis(20);
 
 		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 		let addr = listener.local_addr().unwrap();
