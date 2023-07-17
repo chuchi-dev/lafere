@@ -1,3 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+
 mod varint;
 pub mod decode;
 pub mod encode;
@@ -6,12 +9,34 @@ pub mod test_util;
 #[cfg(test)]
 pub mod tests;
 
-use decode::DecodeError;
+use decode::{DecodeMessage, DecodeError};
+use encode::{MessageEncoder, EncodeMessage, EncodeError};
 
 pub use bytes;
 pub use codegen::*;
 
 
+pub fn from_slice<'a, T>(slice: &'a [u8]) -> Result<T, DecodeError>
+where T: DecodeMessage<'a> {
+	T::parse_from_bytes(slice)
+}
+
+pub fn to_vec<T>(msg: &mut T) -> Result<Vec<u8>, EncodeError>
+where T: EncodeMessage {
+	msg.write_to_bytes()
+}
+
+pub fn to_bytes_writer<T, W>(msg: &mut T, w: &mut W) -> Result<(), EncodeError>
+where
+	T: EncodeMessage,
+	W: bytes::BytesWrite
+{
+	let mut encoder = MessageEncoder::new(w);
+
+	msg.encode(None, &mut encoder)
+}
+
+// todo move this into a module
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WireType {
 	Varint,

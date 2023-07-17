@@ -1,6 +1,8 @@
 use crate::WireType;
 use crate::varint::Varint;
 
+use std::fmt;
+
 use bytes::{BytesOwned, BytesWrite, BytesRead};
 
 
@@ -11,6 +13,16 @@ pub enum EncodeError {
 	Other(String)
 }
 
+impl fmt::Display for EncodeError {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::BufferExausted => write!(f, "the buffer was to small"),
+			Self::Other(s) => write!(f, "encode error: {s}")
+		}
+	}
+}
+
+impl std::error::Error for EncodeError {}
 
 #[derive(Debug)]
 pub struct MessageEncoder<B> {

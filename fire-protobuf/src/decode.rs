@@ -1,6 +1,8 @@
 use crate::WireType;
 use crate::varint::Varint;
 
+use std::fmt;
+
 use bytes::{Bytes, BytesRead, BytesReadRef};
 
 
@@ -20,6 +22,35 @@ pub enum DecodeError {
 	ExpectedArrayLen(usize),
 	Other(String)
 }
+
+impl fmt::Display for DecodeError {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::UnexpectedEof => write!(f, "unexpected end of file"),
+			Self::ExpectedEof => write!(f, "expected end of file"),
+			Self::InvalidVarint => write!(f, "varint is invalid"),
+			Self::InvalidWireType(t) => {
+				write!(f, "the wiretype {t} is invalid")
+			},
+			Self::WireTypeMismatch => write!(f, "wire types don't match"),
+			Self::ExpectedVarintWireType => {
+				write!(f, "expected a varint wire type")
+			},
+			Self::ExpectedI32WireType => write!(f, "expected a i32 wire type"),
+			Self::ExpectedI64WireType => write!(f, "expected a i64 wire type"),
+			Self::ExpectedLenWireType => {
+				write!(f, "expected the len wire type")
+			},
+			Self::ExpectedUtf8 => write!(f, "expected a valid utf8 string"),
+			Self::ExpectedArrayLen(n) => {
+				write!(f, "expected an array length of {n}")
+			},
+			Self::Other(s) => write!(f, "decode error: {s}")
+		}
+	}
+}
+
+impl std::error::Error for DecodeError {}
 
 #[derive(Debug)]
 pub struct MessageDecoder<'a> {

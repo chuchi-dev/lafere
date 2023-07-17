@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 rust-version = "1.58"
 
 [dependencies]
-bytes = { package = "simple-bytes", version = "0.2" }
+bytes = { package = "simple-bytes", version = "0.2.14" }
 codegen = { package = "fire-protobuf-codegen", version = "0.1.2", path = "../fire-protobuf-codegen" }
 
 [dev-dependencies]

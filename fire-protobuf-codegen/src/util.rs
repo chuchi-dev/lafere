@@ -17,8 +17,8 @@ pub(crate) fn fire_protobuf_crate() -> Result<TokenStream> {
 		.map_err(|e| Error::new(Span::call_site(), e))?;
 
 	Ok(match name {
-		// if it get's used inside fire_stream it is a test or an example
-		FoundCrate::Itself => quote!(fire_stream),
+		// if it get's used inside fire_protobuf it is a test or an example
+		FoundCrate::Itself => quote!(fire_protobuf),
 		FoundCrate::Name(n) => {
 			let ident = Ident::new(&n, Span::call_site());
 			quote!(#ident)
