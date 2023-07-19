@@ -117,8 +117,8 @@ fn expand_struct(
 			#[cfg(debug_assertions)]
 			let mut dbg_fields_size = None;
 
-			/// we don't need to get the size if we don't need to write
-			/// the size
+			// we don't need to get the size if we don't need to write
+			// the size
 			if let Some(field) = field {
 				encoder.write_tag(field.num, #wire_type)?;
 

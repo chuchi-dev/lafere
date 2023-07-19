@@ -221,6 +221,60 @@ pub trait EncodeMessage {
 	where B: BytesWrite;
 }
 
+impl<V: EncodeMessage> EncodeMessage for &mut V {
+	const WIRE_TYPE: WireType = V::WIRE_TYPE;
+
+	fn is_default(&self) -> bool {
+		(**self).is_default()
+	}
+
+	fn encoded_size(
+		&mut self,
+		field: Option<FieldOpt>,
+		builder: &mut SizeBuilder
+	) -> Result<(), EncodeError> {
+		(**self).encoded_size(field, builder)
+	}
+
+	fn encode<B>(
+		&mut self,
+		field: Option<FieldOpt>,
+		encoder: &mut MessageEncoder<B>
+	) -> Result<(), EncodeError>
+	where B: BytesWrite {
+		(**self).encode(field, encoder)
+	}
+}
+
+macro_rules! impl_from_ref {
+	($ty:ty) => (
+		impl EncodeMessage for $ty {
+			const WIRE_TYPE: WireType = <&$ty>::WIRE_TYPE;
+
+			fn is_default(&self) -> bool {
+				(&&*self).is_default()
+			}
+
+			fn encoded_size(
+				&mut self,
+				field: Option<FieldOpt>,
+				builder: &mut SizeBuilder
+			) -> Result<(), EncodeError> {
+				(&mut &*self).encoded_size(field, builder)
+			}
+
+			fn encode<B>(
+				&mut self,
+				field: Option<FieldOpt>,
+				encoder: &mut MessageEncoder<B>
+			) -> Result<(), EncodeError>
+			where B: BytesWrite {
+				(&mut &*self).encode(field, encoder)
+			}
+		}
+	)
+}
+
 
 impl<V> EncodeMessage for Vec<V>
 where V: EncodeMessage {
@@ -277,7 +331,7 @@ where V: EncodeMessage {
 }
 
 
-impl<V> EncodeMessage for &mut [V]
+impl<V> EncodeMessage for [V]
 where V: EncodeMessage {
 	const WIRE_TYPE: WireType = WireType::Len;
 
@@ -466,31 +520,139 @@ impl<const S: usize> EncodeMessage for [u8; S] {
 	}
 }
 
-impl EncodeMessage for &mut [u8] {
-	const WIRE_TYPE: WireType = WireType::Len;
+/// a tuple behaves the same way as a struct
+macro_rules! impl_tuple {
+	($($gen:ident, $idx:tt),*) => (
+		impl<$($gen),*> EncodeMessage for ($($gen),*)
+		where
+			$($gen: EncodeMessage),*
+		{
+			const WIRE_TYPE: WireType = WireType::Len;
 
-	fn is_default(&self) -> bool {
-		(&**self).is_default()
-	}
+			fn is_default(&self) -> bool {
+				false
+			}
 
-	/// how big will the size be after writing
-	fn encoded_size(
-		&mut self,
-		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
-	) -> Result<(), EncodeError> {
-		(&**self).encoded_size(field, builder)
-	}
+			/// how big will the size be after writing
+			fn encoded_size(
+				&mut self,
+				field: Option<FieldOpt>,
+				builder: &mut SizeBuilder
+			) -> Result<(), EncodeError> {
+				let mut size = SizeBuilder::new();
+				$(
+					if !self.$idx.is_default() {
+						self.$idx.encoded_size(
+							Some(FieldOpt::new($idx)),
+							&mut size
+						)?;
+					}
+				)*
+				let fields_size = size.finish();
 
-	fn encode<B>(
-		&mut self,
-		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
-	) -> Result<(), EncodeError>
-	where B: BytesWrite {
-		(&**self).encode(field, encoder)
-	}
+				if let Some(field) = field {
+					builder.write_tag(field.num, Self::WIRE_TYPE);
+					builder.write_len(fields_size);
+				}
+
+				builder.write_bytes(fields_size);
+
+				Ok(())
+			}
+
+			fn encode<Bytes>(
+				&mut self,
+				field: Option<FieldOpt>,
+				encoder: &mut MessageEncoder<Bytes>
+			) -> Result<(), EncodeError>
+			where Bytes: BytesWrite {
+				#[cfg(debug_assertions)]
+				let mut dbg_fields_size = None;
+
+				// we don't need to get the size if we don't need to write
+				// the size
+				if let Some(field) = field {
+					encoder.write_tag(field.num, Self::WIRE_TYPE)?;
+
+					let mut size = SizeBuilder::new();
+					$(
+						if !self.$idx.is_default() {
+							self.$idx.encoded_size(
+								Some(FieldOpt::new($idx)),
+								&mut size
+							)?;
+						}
+					)*
+					let fields_size = size.finish();
+
+					encoder.write_len(fields_size)?;
+
+					#[cfg(debug_assertions)]
+					{
+						dbg_fields_size = Some(fields_size);
+					}
+				}
+
+				#[cfg(debug_assertions)]
+				let prev_len = encoder.written_len();
+
+				$(
+					if !self.$idx.is_default() {
+						self.$idx.encode(
+							Some(FieldOpt::new($idx)),
+							encoder
+						)?;
+					}
+				)*
+
+				#[cfg(debug_assertions)]
+				if let Some(fields_size) = dbg_fields_size {
+					let added_len = encoder.written_len() - prev_len;
+					assert_eq!(fields_size, added_len as u64,
+						"encoded size does not match actual size");
+				}
+
+				Ok(())
+			}
+		}
+	)
 }
+
+// impl_tuple![
+// 	A, 0
+// ];
+impl_tuple![
+	A, 0,
+	B, 1
+];
+impl_tuple![
+	A, 0,
+	B, 1,
+	C, 2
+];
+impl_tuple![
+	A, 0,
+	B, 1,
+	C, 2,
+	D, 3
+];
+impl_tuple![
+	A, 0,
+	B, 1,
+	C, 2,
+	D, 3,
+	E, 4
+];
+impl_tuple![
+	A, 0,
+	B, 1,
+	C, 2,
+	D, 3,
+	E, 4,
+	F, 5
+];
+
+impl_from_ref!([u8]);
 
 impl EncodeMessage for &[u8] {
 	const WIRE_TYPE: WireType = WireType::Len;
@@ -530,7 +692,9 @@ impl EncodeMessage for &[u8] {
 	}
 }
 
-impl EncodeMessage for String {
+impl_from_ref!(String);
+
+impl EncodeMessage for &String {
 	const WIRE_TYPE: WireType = WireType::Len;
 
 	fn is_default(&self) -> bool {
@@ -667,12 +831,13 @@ where T: EncodeMessage {
 	}
 }
 
+impl_from_ref!(bool);
 
-impl EncodeMessage for bool {
+impl EncodeMessage for &bool {
 	const WIRE_TYPE: WireType = WireType::Varint;
 
 	fn is_default(&self) -> bool {
-		*self == false
+		**self == false
 	}
 
 	fn encoded_size(
@@ -684,7 +849,7 @@ impl EncodeMessage for bool {
 			builder.write_tag(field.num, Self::WIRE_TYPE);
 		}
 
-		builder.write_varint(*self as u64);
+		builder.write_varint(**self as u64);
 
 		Ok(())
 	}
@@ -699,7 +864,7 @@ impl EncodeMessage for bool {
 			encoder.write_tag(field.num, Self::WIRE_TYPE)?;
 		}
 
-		encoder.write_varint(*self as u64)
+		encoder.write_varint(**self as u64)
 	}
 }
 
@@ -707,11 +872,13 @@ impl EncodeMessage for bool {
 // impl basic varint
 macro_rules! impl_varint {
 	($($ty:ty),*) => ($(
-		impl EncodeMessage for $ty {
+		impl_from_ref!($ty);
+
+		impl EncodeMessage for &$ty {
 			const WIRE_TYPE: WireType = WireType::Varint;
 
 			fn is_default(&self) -> bool {
-				*self == 0
+				**self == 0
 			}
 
 			fn encoded_size(
@@ -723,7 +890,7 @@ macro_rules! impl_varint {
 					builder.write_tag(field.num, Self::WIRE_TYPE);
 				}
 
-				builder.write_varint(*self as u64);
+				builder.write_varint(**self as u64);
 
 				Ok(())
 			}
@@ -738,7 +905,7 @@ macro_rules! impl_varint {
 					encoder.write_tag(field.num, Self::WIRE_TYPE)?;
 				}
 
-				encoder.write_varint(*self as u64)
+				encoder.write_varint(**self as u64)
 			}
 		}
 	)*)
@@ -748,11 +915,13 @@ impl_varint![i32, i64, u32, u64];
 
 macro_rules! impl_floats {
 	($($src:ident, $wty:ident, $wtype:ident as $ty:ty),*) => ($(
-		impl EncodeMessage for $ty {
+		impl_from_ref!($ty);
+
+		impl EncodeMessage for &$ty {
 			const WIRE_TYPE: WireType = WireType::$wtype;
 
 			fn is_default(&self) -> bool {
-				*self == 0 as $ty
+				**self == 0 as $ty
 			}
 
 			fn encoded_size(
@@ -764,7 +933,7 @@ macro_rules! impl_floats {
 					builder.write_tag(field.num, Self::WIRE_TYPE);
 				}
 
-				builder.$src(*self as $wty);
+				builder.$src(**self as $wty);
 
 				Ok(())
 			}
@@ -779,7 +948,7 @@ macro_rules! impl_floats {
 					encoder.write_tag(field.num, Self::WIRE_TYPE)?;
 				}
 
-				encoder.$src(*self as $wty)
+				encoder.$src(**self as $wty)
 			}
 		}
 	)*)

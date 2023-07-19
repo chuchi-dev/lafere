@@ -19,6 +19,8 @@ struct Test2 {
 	nums: Vec<u32>,
 	#[field(2)]
 	compl_enum: Test3,
+	#[field(4)]
+	tupls: (u32, u64),
 	#[field(200)]
 	test4: Test4
 }
@@ -73,6 +75,7 @@ mod tests {
 		let mut test2 = Test2 {
 			nums: (0..10).collect(),
 			compl_enum: Test3::One("hello World".into()),
+			tupls: (10, 20),
 			test4: Test4::One
 		};
 		let bytes = test2.write_to_bytes().unwrap();
@@ -87,6 +90,7 @@ mod tests {
 			some_struct: Test2 {
 				nums: (0..10).collect(),
 				compl_enum: Test3::Two,
+				tupls: (10, 20),
 				test4: Test4::Two
 			}
 		};

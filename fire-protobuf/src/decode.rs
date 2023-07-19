@@ -336,6 +336,78 @@ impl<'m, const S: usize> DecodeMessage<'m> for [u8; S] {
 	}
 }
 
+/// a tuple behaves the same way as a struct
+macro_rules! impl_tuple {
+	($($gen:ident, $idx:tt),*) => (
+		impl<'m, $($gen),*> DecodeMessage<'m> for ($($gen),*)
+		where
+			$($gen: DecodeMessage<'m>),*
+		{
+			const WIRE_TYPE: WireType = WireType::Len;
+
+			fn decode_default() -> Self {
+				($(
+					$gen::decode_default()
+				),*)
+			}
+
+			fn merge(
+				&mut self,
+				kind: FieldKind<'m>,
+				_is_field: bool
+			) -> Result<(), DecodeError> {
+				let mut parser = MessageDecoder::try_from_kind(kind)?;
+
+				while let Some(field) = parser.next()? {
+					match field.number {
+						$(
+							$idx => self.$idx.merge(field.kind, true)?
+						),*,
+						// ignore unknown fields
+						_ => {}
+					}
+				}
+
+				parser.finish()
+			}
+		}
+	)
+}
+
+// impl_tuple![
+// 	A, 0
+// ];
+impl_tuple![
+	A, 0,
+	B, 1
+];
+impl_tuple![
+	A, 0,
+	B, 1,
+	C, 2
+];
+impl_tuple![
+	A, 0,
+	B, 1,
+	C, 2,
+	D, 3
+];
+impl_tuple![
+	A, 0,
+	B, 1,
+	C, 2,
+	D, 3,
+	E, 4
+];
+impl_tuple![
+	A, 0,
+	B, 1,
+	C, 2,
+	D, 3,
+	E, 4,
+	F, 5
+];
+
 impl<'m> DecodeMessage<'m> for String {
 	const WIRE_TYPE: WireType = WireType::Len;
 
