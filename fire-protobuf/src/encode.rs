@@ -2,6 +2,7 @@ use crate::WireType;
 use crate::varint::Varint;
 
 use std::fmt;
+use std::collections::HashMap;
 
 use bytes::{BytesOwned, BytesWrite, BytesRead};
 
@@ -462,6 +463,101 @@ where V: EncodeMessage {
 				is_nested: true
 			};
 			v.encode(Some(field), encoder)?;
+		}
+
+		Ok(())
+	}
+}
+
+impl<K, V> EncodeMessage for HashMap<K, V>
+where
+	for<'a> &'a K: EncodeMessage,
+	V: EncodeMessage
+{
+	const WIRE_TYPE: WireType = WireType::Len;
+
+	fn is_default(&self) -> bool {
+		self.is_empty()
+	}
+
+	/// how big will the size be after writing
+	fn encoded_size(
+		&mut self,
+		field: Option<FieldOpt>,
+		builder: &mut SizeBuilder
+	) -> Result<(), EncodeError> {
+		// if we don't have a fieldnum we need to simulate a custom field
+		let field = field.unwrap_or(FieldOpt::new(1));
+
+		// if this fieldnumber cannot be repeated we need to simulate another
+		// field
+		if field.is_nested {
+			builder.write_tag(field.num, WireType::Len);
+
+			let mut size = SizeBuilder::new();
+			// this works since FieldOpt::new(1) will never be nested
+			self.encoded_size(None, &mut size)?;
+			let size = size.finish();
+
+			builder.write_len(size);
+			builder.write_bytes(size);
+			return Ok(())
+		}
+
+		// we need to create a field for every entry
+		for (k, v) in self.iter_mut() {
+			let field = FieldOpt {
+				num: field.num,
+				is_nested: true
+			};
+			(k, v).encoded_size(Some(field), builder)?;
+		}
+
+		Ok(())
+	}
+
+	fn encode<B>(
+		&mut self,
+		field: Option<FieldOpt>,
+		encoder: &mut MessageEncoder<B>
+	) -> Result<(), EncodeError>
+	where B: BytesWrite {
+		// if we don't have a fieldnum we need to simulate a custom field
+		let field = field.unwrap_or(FieldOpt::new(1));
+
+		// if this fieldnumber cannot be repeated we need to simulate another
+		// field
+		if field.is_nested {
+			encoder.write_tag(field.num, WireType::Len)?;
+
+			let mut size = SizeBuilder::new();
+			self.encoded_size(None, &mut size)?;
+			let size = size.finish();
+
+			encoder.write_len(size)?;
+
+			#[cfg(debug_assertions)]
+			let prev_len = encoder.written_len();
+
+			self.encode(None, encoder)?;
+
+			#[cfg(debug_assertions)]
+			{
+				let added_len = encoder.written_len() - prev_len;
+				assert_eq!(size, added_len as u64,
+					"size does not match real size");
+			}
+
+			return Ok(())
+		}
+
+		// we need to create a field for every entry
+		for (k, v) in self.iter_mut() {
+			let field = FieldOpt {
+				num: field.num,
+				is_nested: true
+			};
+			(k, v).encode(Some(field), encoder)?;
 		}
 
 		Ok(())

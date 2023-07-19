@@ -2,6 +2,8 @@ use crate::WireType;
 use crate::varint::Varint;
 
 use std::fmt;
+use std::hash::Hash;
+use std::collections::HashMap;
 
 use bytes::{Bytes, BytesRead, BytesReadRef};
 
@@ -287,6 +289,49 @@ where V: DecodeMessage<'m> {
 		v.merge(kind, false)?;
 
 		self.push(v);
+
+		Ok(())
+	}
+}
+
+impl<'m, K, V> DecodeMessage<'m> for HashMap<K, V>
+where
+	K: DecodeMessage<'m> + Eq + Hash,
+	V: DecodeMessage<'m>
+{
+	const WIRE_TYPE: WireType = WireType::Len;
+
+	fn decode_default() -> Self {
+		Self::new()
+	}
+
+	fn merge(
+		&mut self,
+		kind: FieldKind<'m>,
+		is_field: bool
+	) -> Result<(), DecodeError> {
+		// if this is not a field
+		// we need to create a struct / message
+		// which contains one field which is repeatable
+		if !is_field {
+			let mut parser = MessageDecoder::try_from_kind(kind)?;
+
+			while let Some(field) = parser.next()? {
+				if field.number != 1 {
+					continue
+				}
+
+				// were now in a field of our virtual message/struct
+				self.merge(field.kind, true)?;
+			}
+
+			return parser.finish();
+		}
+
+		let mut field = <(K, V)>::decode_default();
+		field.merge(kind, false)?;
+
+		self.insert(field.0, field.1);
 
 		Ok(())
 	}
