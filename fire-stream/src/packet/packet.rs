@@ -113,8 +113,8 @@ kind!{
 
 // equivalent to expect response
 const KIND_OFFSET: u8 = 4;
-const MAX_KIND: u8 = u8::MAX << KIND_OFFSET;
-const KIND_MASK: u8 = 0b11_111 << KIND_OFFSET;
+const MAX_KIND: u8 = u8::MAX >> KIND_OFFSET;
+const KIND_MASK: u8 = 0b1111 << KIND_OFFSET;
 // const IS_STREAM: u8 = 1 << 3;
 // const IS_LAST: u8 = 1 << 2;
 
@@ -156,6 +156,7 @@ impl Flags {
 	pub(crate) fn set_kind(&mut self, kind: Kind) {
 		let num = kind.as_num();
 		debug_assert!(num < MAX_KIND);
+		// clear mask
 		self.inner &= !KIND_MASK;
 		self.inner |= num << KIND_OFFSET;
 	}

@@ -6,7 +6,7 @@ authors = ["Sören meier <info@soerenmeier.ch>"]
 repository = "https://github.com/fire-lib/fire-stream"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-rust-version = "1.58"
+rust-version = "1.64"
 
 [[test]]
 name = "complete"
@@ -21,7 +21,7 @@ protobuf = ["fire-protobuf"]
 
 [dependencies]
 stream = { package = "fire-stream", version = "0.3.1", path = "./../fire-stream", default-features = false }
-crypto = { package = "fire-crypto", version = "0.3", features = ["cipher", "signature"], optional = true }
+crypto = { package = "fire-crypto", version = "0.4", features = ["cipher", "signature"], optional = true }
 bytes = { package = "simple-bytes", version = "0.2.6" }
 tokio = { version = "1.0", features = ["net", "io-util", "time", "sync"], optional = true }
 codegen = { package = "fire-stream-api-codegen", version = "0.1.3", path  = "./../fire-stream-api-codegen" }

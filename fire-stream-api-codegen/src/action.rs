@@ -66,7 +66,7 @@ fn repr_as_u16(attrs: Vec<Attribute>) -> Result<bool> {
 	let mut repr_as = None;
 
 	for attr in attrs {
-		if !attr.path.is_ident("repr") {
+		if !attr.path().is_ident("repr") {
 			continue
 		}
 

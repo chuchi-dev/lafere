@@ -169,7 +169,7 @@ pub struct FieldOpt {
 }
 
 impl FieldOpt {
-	pub fn new(num: u64) -> Self {
+	pub const fn new(num: u64) -> Self {
 		Self {
 			num,
 			is_nested: false

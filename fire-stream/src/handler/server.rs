@@ -178,7 +178,7 @@ where
 	}
 
 	pub fn close_all(&mut self) {
-		for (_, resp) in &mut self.inner {
+		for resp in self.inner.values_mut() {
 			match resp {
 				Response::Request(resp) => resp.close(),
 				Response::Receiver(resp) => resp.close()

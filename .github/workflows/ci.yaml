@@ -10,7 +10,6 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
   RUST_BACKTRACE: 1
-  rust_min: 1.58.0
 
 jobs:
   build_and_test:
@@ -20,9 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.rust_min }}
+        uses: dtolnay/rust-toolchain@1.64
       - name: Build no features
         run: cargo build --no-default-features
       - name: Run tests no features

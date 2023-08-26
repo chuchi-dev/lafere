@@ -68,7 +68,7 @@ where S: AsyncRead + AsyncWrite + Unpin {
 
 		// write signature
 		buffer.seek(BASE_LEN);
-		buffer.write(sign);
+		buffer.write(sign.to_bytes());
 
 		// now send
 		buffer.seek(0);

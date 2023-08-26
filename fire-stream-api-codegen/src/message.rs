@@ -73,7 +73,7 @@ impl MsgAttribute {
 		let mut module = None;
 
 		for attr in attrs {
-			if !attr.path.is_ident("message") {
+			if !attr.path().is_ident("message") {
 				continue
 			}
 
