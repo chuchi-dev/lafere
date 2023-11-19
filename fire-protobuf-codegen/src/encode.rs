@@ -71,7 +71,7 @@ fn expand_struct(
 			&mut self,
 			field: Option<#fire_encode::FieldOpt>,
 			builder: &mut #fire_encode::SizeBuilder
-		) -> Result<(), #fire_encode::EncodeError> {
+		) -> std::result::Result<(), #fire_encode::EncodeError> {
 			let mut size = #fire_encode::SizeBuilder::new();
 			#(
 				#encoded_size_fields
@@ -112,7 +112,7 @@ fn expand_struct(
 			&mut self,
 			field: Option<#fire_encode::FieldOpt>,
 			encoder: &mut #fire_encode::MessageEncoder<B>
-		) -> Result<(), #fire_encode::EncodeError>
+		) -> std::result::Result<(), #fire_encode::EncodeError>
 		where B: #fire::bytes::BytesWrite {
 			#[cfg(debug_assertions)]
 			let mut dbg_fields_size = None;
@@ -219,7 +219,7 @@ fn expand_enum_no_fields(
 			&mut self,
 			field: Option<#fire_encode::FieldOpt>,
 			builder: &mut #fire_encode::SizeBuilder
-		) -> Result<(), #fire_encode::EncodeError> {
+		) -> std::result::Result<(), #fire_encode::EncodeError> {
 			if let Some(field) = field {
 				builder.write_tag(field.num, #wire_type);
 			}
@@ -239,7 +239,7 @@ fn expand_enum_no_fields(
 			&mut self,
 			field: Option<#fire_encode::FieldOpt>,
 			encoder: &mut #fire_encode::MessageEncoder<B>
-		) -> Result<(), #fire_encode::EncodeError>
+		) -> std::result::Result<(), #fire_encode::EncodeError>
 		where B: #fire::bytes::BytesWrite {
 			if let Some(field) = field {
 				encoder.write_tag(field.num, #wire_type)?;
@@ -313,7 +313,7 @@ fn expand_enum_with_fields(
 			&mut self,
 			field: Option<#fire_encode::FieldOpt>,
 			builder: &mut #fire_encode::SizeBuilder
-		) -> Result<(), #fire_encode::EncodeError> {
+		) -> std::result::Result<(), #fire_encode::EncodeError> {
 			let mut size = #fire_encode::SizeBuilder::new();
 			match self {
 				#(#encoded_size_variants),*
@@ -360,7 +360,7 @@ fn expand_enum_with_fields(
 			&mut self,
 			field: Option<#fire_encode::FieldOpt>,
 			encoder: &mut #fire_encode::MessageEncoder<B>
-		) -> Result<(), #fire_encode::EncodeError>
+		) -> std::result::Result<(), #fire_encode::EncodeError>
 		where B: #fire::bytes::BytesWrite {
 			#[cfg(debug_assertions)]
 			let mut dbg_fields_size = None;

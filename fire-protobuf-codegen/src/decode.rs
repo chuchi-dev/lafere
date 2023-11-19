@@ -83,7 +83,7 @@ fn expand_struct(
 			&mut self,
 			kind: #fire_decode::FieldKind<'m>,
 			_is_field: bool
-		) -> Result<(), #fire_decode::DecodeError> {
+		) -> std::result::Result<(), #fire_decode::DecodeError> {
 			let mut parser = #fire_decode::MessageDecoder::try_from_kind(kind)?;
 
 			while let Some(field) = parser.next()? {
@@ -159,7 +159,7 @@ fn expand_enum_no_fields(
 			&mut self,
 			kind: #fire_decode::FieldKind<'m>,
 			_is_field: bool
-		) -> Result<(), #fire_decode::DecodeError> {
+		) -> std::result::Result<(), #fire_decode::DecodeError> {
 			let num = kind.try_unwrap_varint()?;
 
 			*self = match num {
@@ -263,7 +263,7 @@ fn expand_enum_with_fields(
 			&mut self,
 			kind: #fire_decode::FieldKind<'m>,
 			_is_field: bool
-		) -> Result<(), #fire_decode::DecodeError> {
+		) -> std::result::Result<(), #fire_decode::DecodeError> {
 			let mut parser = #fire_decode::MessageDecoder::try_from_kind(kind)?;
 
 			while let Some(field) = parser.next()? {
