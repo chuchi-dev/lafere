@@ -50,10 +50,22 @@ enum Test4 {
 	Two = 2
 }
 
+#[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
+struct Test5 {}
+
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn test5() {
+		let mut test5 = Test5 {};
+		let bytes = test5.write_to_bytes().unwrap();
+		assert!(bytes.is_empty());
+		let n_test5 = Test5::parse_from_bytes(&bytes).unwrap();
+		assert_eq!(test5, n_test5);
+	}
 
 	#[test]
 	fn test3() {

@@ -77,6 +77,11 @@ fn expand_struct(
 			)
 		});
 
+	let trailing_comma = if fields.is_empty() {
+		quote!()
+	} else {
+		quote!(,)
+	};
 
 	let merge = quote!(
 		fn merge(
@@ -90,7 +95,8 @@ fn expand_struct(
 				match field.number {
 					#(
 						#merge_fields
-					),*,
+					),*
+					#trailing_comma
 					// ignore unknown fields
 					_ => {}
 				}
