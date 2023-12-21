@@ -1,0 +1,10 @@
+## 0.4.0 - 2023-10-31
+- update to fire-crypto 0.4
+- Bump msrv to 1.64
+
+## 0.3.1 - 2023-01-19
+- add feature connection which allows to remove tokio
+
+## 0.3.1 - 2023-01-14
+- improve error management
+- refactor a few things
