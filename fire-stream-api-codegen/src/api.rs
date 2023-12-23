@@ -76,7 +76,9 @@ pub(crate) fn expand(
 		let block = &item.block;
 
 		quote!(
-			#asyncness fn handler( #inputs ) #output
+			#asyncness fn handler<B: #fire::message::PacketBytes + Send + 'static>(
+				#inputs
+			) #output
 				#block
 		)
 	};
@@ -132,9 +134,6 @@ pub(crate) fn expand(
 			> {
 				#handler_fn
 
-				type __Response = #ty_as_req::Response;
-				type __Error = #ty_as_req::Error;
-
 				// msg to req
 				// call handler
 				// convert resp to msg
@@ -144,22 +143,21 @@ pub(crate) fn expand(
 					msg: #msg_ty,
 					data: &#fire::server::Data,
 					session: &#fire::server::Session
-				) -> std::result::Result<#msg_ty, __Error>
-				where B: #fire::message::PacketBytes {
-
+				) -> std::result::Result<#msg_ty, #ty_as_req::Error>
+				where B: #fire::message::PacketBytes + Send + 'static {
 					let req = <#req_ty as #from_msg>::from_message(msg)
-						.map_err(<__Error as #api_err>::from_message_error)?;
+						.map_err(<#ty_as_req::Error as #api_err>::from_message_error)?;
 
 					let req = #fire::util::DataManager::new(req);
 
 					#(#handler_args_vars)*
 
-					let resp: __Response = handler(
+					let resp: #ty_as_req::Response = handler::<B>(
 						#(#handler_args),*
 					)#await_kw?;
 
-					<__Response as #into_msg>::into_message(resp)
-						.map_err(<__Error as #api_err>::from_message_error)
+					<#ty_as_req::Response as #into_msg>::into_message(resp)
+						.map_err(<#ty_as_req::Error as #api_err>::from_message_error)
 				}
 
 				#fire::util::PinnedFuture::new(async move {
@@ -175,7 +173,7 @@ pub(crate) fn expand(
 								), e)
 							}
 
-							<__Error as #into_msg>::into_message(e)
+							<#ty_as_req::Error as #into_msg>::into_message(e)
 								.map(|mut msg| {
 									msg.set_success(false);
 									msg
