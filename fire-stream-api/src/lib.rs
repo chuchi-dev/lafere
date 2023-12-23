@@ -22,4 +22,7 @@ pub use stream;
 #[doc(hidden)]
 pub use bytes;
 
+#[doc(hidden)]
+pub use tracing;
+
 pub use codegen::*;

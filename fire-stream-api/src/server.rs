@@ -121,8 +121,9 @@ where
 	A: Action,
 	L: Listener
 {
-	/// If this ist set to true
-	/// errors which are returned in `#[api(*)]` functions are logged to stderr
+	/// If this is set to true
+	/// errors which are returned in `#[api(*)]` functions are logged to tracing
+	#[deprecated]
 	pub fn set_log_errors(&mut self, log: bool) {
 		self.data.cfg.log_errors = log;
 	}
@@ -166,7 +167,7 @@ where
 						// we need to pass our own errors via packets
 						// not only those from the api users
 						None => {
-							eprintln!("invalid action received");
+							tracing::error!("invalid action received");
 							continue
 						}
 					};
@@ -178,7 +179,7 @@ where
 							// we need to pass our own errors via packets
 							// not only those from the api users
 							None => {
-								eprintln!("no handler for {:?}", action);
+								tracing::error!("no handler for {:?}", action);
 								return;
 							}
 						};
@@ -198,7 +199,9 @@ where
 								// todo once we bump the version again
 								// we need to pass our own errors via packets
 								// not only those from the api users
-								eprintln!("handler returned an error {:?}", e);
+								tracing::error!(
+									"handler returned an error {:?}", e
+								);
 							}
 						}
 					});

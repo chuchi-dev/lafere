@@ -167,10 +167,9 @@ pub(crate) fn expand(
 						Ok(m) => Ok(m),
 						Err(e) => {
 							if data.cfg().log_errors {
-								eprintln!(concat!(
-									stringify!(#req_ty),
-									" returned error {:?}"
-								), e)
+								#fire::tracing::error!(
+									"handler returned an error {e:?}"
+								);
 							}
 
 							<#ty_as_req::Error as #into_msg>::into_message(e)
