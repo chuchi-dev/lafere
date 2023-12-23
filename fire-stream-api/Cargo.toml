@@ -10,7 +10,11 @@ rust-version = "1.67"
 
 [[test]]
 name = "complete"
-required-features = ["encrypted"]
+required-features = ["encrypted", "json"]
+
+[[test]]
+name = "advanced"
+required-features = ["encrypted", "json"]
 
 [features]
 default = ["connection"]
