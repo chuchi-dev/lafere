@@ -168,7 +168,7 @@ pub(crate) fn expand(
 						Err(e) => {
 							if data.cfg().log_errors {
 								#fire::tracing::error!(
-									"handler returned an error {e:?}"
+									"handler returned an error {:?}", e
 								);
 							}
 
