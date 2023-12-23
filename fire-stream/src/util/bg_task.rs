@@ -96,11 +96,13 @@ macro_rules! bg_stream {
 					else => {
 						if let Some(packet) = close_packet.take() {
 							if let Err(e) = stream.send(packet).await {
-								eprintln!("error sending close packet {:?}", e);
+								tracing::error!(
+									"error sending close packet {:?}", e
+								);
 							}
 						}
 						if let Err(e) = stream.shutdown().await {
-							eprintln!("error shutting down {:?}", e);
+							tracing::error!("error shutting down {:?}", e);
 						}
 
 						return Ok(())
@@ -144,7 +146,7 @@ macro_rules! client_bg_reconnect {
 						match stream {
 							Ok(s) => break s,
 							Err(e) => {
-								eprintln!(
+								tracing::error!(
 									"reconnect failed attempt {} {:?}",
 									err_counter,
 									e
@@ -166,7 +168,7 @@ macro_rules! client_bg_reconnect {
 			let stream = match stream {
 				Ok(s) => s,
 				Err(e) => {
-					eprintln!("creating packetstream failed {:?}", e);
+					tracing::error!("creating packetstream failed {:?}", e);
 					// close since we can't reconnect
 					if $recon_strat.is_none() {
 						return Err(e)
@@ -186,7 +188,9 @@ macro_rules! client_bg_reconnect {
 			match r {
 				Ok(o) => return Ok(o),
 				Err(e) => {
-					eprintln!("fire stream client connection failed {:?}", e);
+					tracing::error!(
+						"fire stream client connection failed {:?}", e
+					);
 					if $recon_strat.is_none() {
 						// close since we can't reconnect
 						return Err(e)

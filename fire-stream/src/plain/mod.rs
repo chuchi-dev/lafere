@@ -67,7 +67,7 @@ where
 		).await;
 
 		if let Err(e) = &r {
-			eprintln!("server_bg_stream error {:?}", e)
+			tracing::error!("server_bg_stream error {:?}", e)
 		}
 
 		r

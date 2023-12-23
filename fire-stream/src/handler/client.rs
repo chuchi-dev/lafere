@@ -377,7 +377,7 @@ where
 			Kind::StreamClosed => Err(TaskError::Packet(e)),
 			Kind::Stream => {
 				// ignore a stream packet which had an error
-				eprintln!(
+				tracing::error!(
 					"failed to parse stream packet {} {:?}",
 					header.id(),
 					e

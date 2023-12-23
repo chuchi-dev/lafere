@@ -74,7 +74,7 @@ where
 		).await;
 
 		if let Err(e) = &r {
-			eprintln!("bg_stream closed with error {:?}", e);
+			tracing::error!("bg_stream closed with error {:?}", e);
 		}
 
 		r
