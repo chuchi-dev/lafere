@@ -10,6 +10,7 @@ use tokio::net::{TcpListener, TcpStream};
 
 /// SocketAddr struct equivalent to the one in stdlib but
 /// the unix::SocketAddr was added.
+// todo make this non_complete
 pub enum SocketAddr {
 	V4(SocketAddrV4),
 	V6(SocketAddrV6),

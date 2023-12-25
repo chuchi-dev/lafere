@@ -1,7 +1,7 @@
 [package]
 name = "fire-stream"
 description = "A more or less simple communication protocol library."
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Sören meier <info@soerenmeier.ch>"]
 repository = "https://github.com/fire-lib/fire-stream"
 edition = "2021"

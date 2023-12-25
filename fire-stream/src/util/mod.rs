@@ -5,6 +5,7 @@ mod pinned_future;
 #[macro_use]
 pub mod bg_task;
 mod listener;
+pub mod testing;
 
 pub(crate) use timeout::TimeoutReader;
 pub use poll_fn::{poll_fn, PollFn};

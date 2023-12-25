@@ -1,3 +1,9 @@
+## 0.4.2 - 2023-12-23
+- add `util::testing::PanicListener` to make it easier to test fire-stream-api
+
+## 0.4.1 - 2023-12-23
+- add tracing
+
 ## 0.4.0 - 2023-10-31
 - update to fire-crypto 0.4
 - Bump msrv to 1.64
