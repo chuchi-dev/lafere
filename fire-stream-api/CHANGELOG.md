@@ -1,3 +1,10 @@
+## 0.3.2 - 2023-12-25
+- add new api to make a request to a server without going over any network stack.
+Allowing to just pass bytes (useful for testing)
+
+## 0.3.1 - 2023-12-23
+- add tracing
+
 ## 0.3.0 - 2023-10-31
 - Bump msrv to 1.67
 - update fire-crypto 0.4

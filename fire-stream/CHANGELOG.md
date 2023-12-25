@@ -1,4 +1,4 @@
-## 0.4.2 - 2023-12-23
+## 0.4.2 - 2023-12-25
 - add `util::testing::PanicListener` to make it easier to test fire-stream-api
 
 ## 0.4.1 - 2023-12-23
