@@ -1,3 +1,6 @@
+## 0.3.3 - 2023-12-26
+- add a way to get data from a built server
+
 ## 0.3.2 - 2023-12-25
 - add new api to make a request to a server without going over any network stack.
 Allowing to just pass bytes (useful for testing)

@@ -214,6 +214,11 @@ where
 	A: Action,
 	L: Listener
 {
+	pub fn get_data<D>(&self) -> Option<&D>
+	where D: Any {
+		self.shared.data.get()
+	}
+
 	pub async fn request<R>(
 		&self,
 		r: R,
@@ -512,6 +517,8 @@ mod json_tests {
 			body_limit: 4096
 		});
 
+		server.register_data(String::from("global String"));
+
 		server.register_request(test);
 		server.register_request(test_2);
 
@@ -528,6 +535,8 @@ mod json_tests {
 			&session
 		).await.unwrap();
 		assert_eq!(r.hi, 100);
+
+		assert_eq!(server.get_data::<String>().unwrap(), "global String");
 	}
 }
 
