@@ -1,15 +1,12 @@
-mod poll_fn;
 mod timeout;
 pub(crate) mod watch;
-mod pinned_future;
 #[macro_use]
 pub mod bg_task;
 mod listener;
 pub mod testing;
 
 pub(crate) use timeout::TimeoutReader;
-pub use poll_fn::{poll_fn, PollFn};
-pub use pinned_future::PinnedFuture;
+pub use crate::standalone_util::*;
 pub use listener::{SocketAddr, Listener, ListenerExt};
 
 use tokio::io::{AsyncRead, AsyncWrite};

@@ -7,6 +7,8 @@ pub mod handler;
 #[macro_use]
 pub mod util;
 
+pub mod standalone_util;
+
 pub mod packet;
 #[cfg(feature = "connection")]
 mod plain;
