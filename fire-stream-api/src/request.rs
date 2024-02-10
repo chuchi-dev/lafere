@@ -1,8 +1,14 @@
-use crate::message::{Message, Action};
-use crate::error::{Error, ApiError};
-use crate::server::{Data, Session};
+use crate::message::Action;
+use crate::error::ApiError;
+#[cfg(feature = "connection")]
+use crate::{
+	message::Message,
+	error::Error,
+	server::{Data, Session}
+};
 
-use stream::util::PinnedFuture;
+#[cfg(feature = "connection")]
+use stream::standalone_util::PinnedFuture;
 
 
 /// Basic request definition.
@@ -14,6 +20,7 @@ pub trait Request {
 	const ACTION: Self::Action;
 }
 
+#[cfg(feature = "connection")]
 pub trait RequestHandler<B> {
 	type Action: Action;
 

@@ -7,7 +7,6 @@
 #[cfg(feature = "connection")]
 pub mod util;
 pub mod message;
-#[cfg(feature = "connection")]
 pub mod request;
 #[cfg(feature = "connection")]
 pub mod client;
