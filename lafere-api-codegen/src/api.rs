@@ -1,18 +1,14 @@
-use crate::ApiArgs;
 use crate::util::{
-	validate_signature, fire_api_crate, validate_inputs, ref_type
+	lafere_api_crate, ref_type, validate_inputs, validate_signature,
 };
+use crate::ApiArgs;
 
-use proc_macro2::{TokenStream};
-use syn::{Result, ItemFn};
-use quote::{quote, format_ident};
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote};
+use syn::{ItemFn, Result};
 
-
-pub(crate) fn expand(
-	args: ApiArgs,
-	item: ItemFn
-) -> Result<TokenStream> {
-	let fire = fire_api_crate()?;
+pub(crate) fn expand(args: ApiArgs, item: ItemFn) -> Result<TokenStream> {
+	let fire = lafere_api_crate()?;
 	let req_ty = args.ty;
 
 	validate_signature(&item.sig)?;
@@ -50,11 +46,11 @@ pub(crate) fn expand(
 						#fire::util::valid_data_as_ref
 							::<#elem, #req_ty>
 					)
-				},
+				}
 				None => quote!(
 					#fire::util::valid_data_as_owned
 						::<#ty, #req_ty>
-				)
+				),
 			};
 
 			asserts.push(quote!(
@@ -85,11 +81,7 @@ pub(crate) fn expand(
 
 	let handle_fn = {
 		let is_async = item.sig.asyncness.is_some();
-		let await_kw = if is_async {
-			quote!(.await)
-		} else {
-			quote!()
-		};
+		let await_kw = if is_async { quote!(.await) } else { quote!() };
 
 		let mut handler_args_vars = vec![];
 		let mut handler_args = vec![];
@@ -102,11 +94,11 @@ pub(crate) fn expand(
 						#fire::util::get_data_as_ref
 							::<#elem, #req_ty>
 					)
-				},
+				}
 				None => quote!(
 					#fire::util::get_data_as_owned
 						::<#ty, #req_ty>
-				)
+				),
 			};
 
 			let var_name = format_ident!("handler_arg_{idx}");

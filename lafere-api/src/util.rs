@@ -1,11 +1,10 @@
-use crate::server::{Session, Data};
+use crate::server::{Data, Session};
 
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::mem::ManuallyDrop;
 
-pub use stream::util::PinnedFuture;
-
+pub use lafere::util::PinnedFuture;
 
 fn is_req<T: Any, R: Any>() -> bool {
 	TypeId::of::<T>() == TypeId::of::<R>()
@@ -23,8 +22,10 @@ fn is_data<T: Any>() -> bool {
 #[doc(hidden)]
 #[inline]
 pub fn valid_data_as_ref<T: Any, R: Any>(data: &Data) -> bool {
-	is_req::<T, R>() || is_session::<T>() ||
-	is_data::<T>() || data.exists::<T>()
+	is_req::<T, R>()
+		|| is_session::<T>()
+		|| is_data::<T>()
+		|| data.exists::<T>()
 }
 
 /// fn to check if a type can be accessed in a route as mutable reference
@@ -36,13 +37,13 @@ pub fn valid_data_as_owned<T: Any, R: Any>(_data: &Data) -> bool {
 
 #[doc(hidden)]
 pub struct DataManager<T> {
-	inner: RefCell<Option<T>>
+	inner: RefCell<Option<T>>,
 }
 
 impl<T> DataManager<T> {
 	pub fn new(val: T) -> Self {
 		Self {
-			inner: RefCell::new(Some(val))
+			inner: RefCell::new(Some(val)),
 		}
 	}
 
@@ -61,9 +62,7 @@ impl<T> DataManager<T> {
 		let r = ManuallyDrop::new(r);
 		// since the borrow counter does not get decreased because of the
 		// ManuallyDrop and the lifetime not getting expanded this is safe
-		unsafe {
-			&*(&**r as *const Option<T>)
-		}.as_ref().unwrap()
+		unsafe { &*(&**r as *const Option<T>) }.as_ref().unwrap()
 	}
 
 	/// ##Panics
@@ -79,7 +78,7 @@ impl<T> DataManager<T> {
 pub fn get_data_as_ref<'a, T: Any, R: Any>(
 	data: &'a Data,
 	session: &'a Session,
-	req: &'a DataManager<R>
+	req: &'a DataManager<R>,
 ) -> &'a T {
 	if is_req::<T, R>() {
 		let req = req.as_ref();
@@ -98,13 +97,11 @@ pub fn get_data_as_ref<'a, T: Any, R: Any>(
 pub fn get_data_as_owned<T: Any, R: Any>(
 	_data: &Data,
 	_session: &Session,
-	req: &DataManager<R>
+	req: &DataManager<R>,
 ) -> T {
 	if is_req::<T, R>() {
 		let req = req.take();
-		unsafe {
-			transform_owned::<T, R>(req)
-		}
+		unsafe { transform_owned::<T, R>(req) }
 	} else {
 		unreachable!()
 	}

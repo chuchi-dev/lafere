@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-	"fire-stream",
-	"fire-stream-api",
-	"fire-stream-api-codegen",
-	"fire-protobuf",
-	"fire-protobuf-codegen"
+    "lafere",
+    "lafere-api",
+    "lafere-api-codegen",
+    "protopuffer",
+    "protopuffer-codegen",
 ]

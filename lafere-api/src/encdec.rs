@@ -2,17 +2,16 @@
 #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 pub mod json {
 	use crate::error::MessageError;
-	use crate::message::{Message, Action, PacketBytes};
+	use crate::message::{Action, Message, PacketBytes};
 	use bytes::BytesRead;
 
-	use serde::{Serialize, de::DeserializeOwned};
-
+	use serde::{de::DeserializeOwned, Serialize};
 
 	pub fn encode<T, A, B>(value: T) -> Result<Message<A, B>, MessageError>
 	where
 		T: Serialize,
 		A: Action,
-		B: PacketBytes
+		B: PacketBytes,
 	{
 		let mut msg = Message::new();
 		serde_json::to_writer(msg.body_mut(), &value)
@@ -25,7 +24,7 @@ pub mod json {
 	where
 		A: Action,
 		B: PacketBytes,
-		T: DeserializeOwned
+		T: DeserializeOwned,
 	{
 		serde_json::from_slice(msg.body().as_slice())
 			.map_err(MessageError::Json)
@@ -36,22 +35,22 @@ pub mod json {
 #[cfg_attr(docsrs, doc(cfg(feature = "protobuf")))]
 pub mod protobuf {
 	use crate::error::MessageError;
-	use crate::message::{Message, Action, PacketBytes};
+	use crate::message::{Action, Message, PacketBytes};
 	use bytes::BytesRead;
 
-	use fire_protobuf::encode::{EncodeMessage, MessageEncoder};
-	use fire_protobuf::decode::DecodeMessage;
-
+	use protopuffer::decode::DecodeMessage;
+	use protopuffer::encode::{EncodeMessage, MessageEncoder};
 
 	pub fn encode<T, A, B>(mut value: T) -> Result<Message<A, B>, MessageError>
 	where
 		T: EncodeMessage,
 		A: Action,
-		B: PacketBytes
+		B: PacketBytes,
 	{
 		let mut msg = Message::new();
 		let mut encoder = MessageEncoder::new(msg.body_mut());
-		value.encode(None, &mut encoder)
+		value
+			.encode(None, &mut encoder)
 			.map_err(MessageError::EncodeError)?;
 
 		Ok(msg)
@@ -61,7 +60,7 @@ pub mod protobuf {
 	where
 		A: Action,
 		B: PacketBytes,
-		T: for<'a> DecodeMessage<'a>
+		T: for<'a> DecodeMessage<'a>,
 	{
 		T::parse_from_bytes(msg.body().as_slice())
 			.map_err(MessageError::DecodeError)

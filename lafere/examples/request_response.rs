@@ -2,35 +2,36 @@ use std::time::Duration;
 
 use tokio::io;
 
-use fire_stream::{client, server};
-use fire_stream::server::Message;
-use fire_stream::packet::{
-	Flags, PacketHeader, Packet, PacketError, PacketBytes, BodyBytes,
-	BodyBytesMut
+use lafere::packet::{
+	BodyBytes, BodyBytesMut, Flags, Packet, PacketBytes, PacketError,
+	PacketHeader,
 };
+use lafere::server::Message;
+use lafere::{client, server};
 
 use bytes::{Bytes, BytesMut, BytesRead, BytesWrite};
-
 
 #[derive(Debug, Clone)]
 struct MyPacket<B> {
 	header: MyHeader,
-	bytes: B
+	bytes: B,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct MyHeader {
 	length: u32,
 	flags: Flags,
-	id: u32
+	id: u32,
 }
 
 impl<B> MyPacket<B>
-where B: PacketBytes {
+where
+	B: PacketBytes,
+{
 	pub fn empty() -> Self {
 		Self {
 			header: MyHeader::default(),
-			bytes: B::new(MyHeader::LEN as usize)
+			bytes: B::new(MyHeader::LEN as usize),
 		}
 	}
 
@@ -44,7 +45,9 @@ where B: PacketBytes {
 }
 
 impl<B> Packet<B> for MyPacket<B>
-where B: PacketBytes {
+where
+	B: PacketBytes,
+{
 	type Header = MyHeader;
 
 	fn header(&self) -> &Self::Header {
@@ -58,13 +61,13 @@ where B: PacketBytes {
 	fn empty() -> Self {
 		Self {
 			header: MyHeader::default(),
-			bytes: B::new(MyHeader::LEN as usize)
+			bytes: B::new(MyHeader::LEN as usize),
 		}
 	}
 
 	fn from_bytes_and_header(
 		bytes: B,
-		header: Self::Header
+		header: Self::Header,
 	) -> Result<Self, PacketError> {
 		Ok(Self { header, bytes })
 	}
@@ -91,7 +94,7 @@ impl PacketHeader for MyHeader {
 		Ok(Self {
 			length: bytes.read_u32(),
 			flags: Flags::from_u8(bytes.read_u8())?,
-			id: bytes.read_u32()
+			id: bytes.read_u32(),
 		})
 	}
 
@@ -116,7 +119,6 @@ impl PacketHeader for MyHeader {
 	}
 }
 
-
 #[tokio::main]
 async fn main() {
 	let (client, server) = io::duplex(1024);
@@ -125,19 +127,18 @@ async fn main() {
 		client,
 		client::Config {
 			timeout: Duration::from_secs(1),
-			body_limit: 1024
+			body_limit: 1024,
 		},
-		None
+		None,
 	);
 
 	let mut server = server::Connection::<MyPacket<_>>::new(
 		server,
 		server::Config {
 			timeout: Duration::from_secs(1),
-			body_limit: 1024
-		}
+			body_limit: 1024,
+		},
 	);
-
 
 	let client_task = tokio::spawn(async move {
 		let mut req = MyPacket::empty();
@@ -156,8 +157,8 @@ async fn main() {
 				let mut resp = MyPacket::empty();
 				resp.body_mut().write(b"Hello, Back!");
 				resp_sender.send(resp).unwrap();
-			},
-			_ => unreachable!()
+			}
+			_ => unreachable!(),
 		}
 
 		assert!(server.receive().await.is_none());

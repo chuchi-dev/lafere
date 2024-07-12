@@ -1,4 +1,4 @@
-## Fire Protobuf
+## Protopuffer
 
 A library to encode and decode data in the protobuf format. Supports derive.
 

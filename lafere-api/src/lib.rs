@@ -5,18 +5,18 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "connection")]
-pub mod util;
+pub mod client;
+pub mod encdec;
+pub mod error;
 pub mod message;
 pub mod request;
 #[cfg(feature = "connection")]
-pub mod client;
-#[cfg(feature = "connection")]
 pub mod server;
-pub mod encdec;
-pub mod error;
+#[cfg(feature = "connection")]
+pub mod util;
 
 #[doc(hidden)]
-pub use stream;
+pub use lafere;
 
 #[doc(hidden)]
 pub use bytes;

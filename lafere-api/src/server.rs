@@ -1,20 +1,20 @@
-use crate::error::{RequestError, ApiError};
-use crate::message::{Action, Message, IntoMessage, FromMessage};
-use crate::request::{RequestHandler, Request};
+use crate::error::{ApiError, RequestError};
+use crate::message::{Action, FromMessage, IntoMessage, Message};
+use crate::request::{Request, RequestHandler};
 
-use stream::util::{SocketAddr, Listener, ListenerExt};
-use stream::packet::{Packet, PacketBytes};
-pub use stream::packet::PlainBytes;
-use stream::server::{self, Connection};
-pub use stream::server::Config;
+pub use lafere::packet::PlainBytes;
+use lafere::packet::{Packet, PacketBytes};
+pub use lafere::server::Config;
+use lafere::server::{self, Connection};
+use lafere::util::{Listener, ListenerExt, SocketAddr};
 
 #[cfg(feature = "encrypted")]
-pub use stream::packet::EncryptedBytes;
+pub use lafere::packet::EncryptedBytes;
 
-use std::collections::HashMap;
 use std::any::{Any, TypeId};
-use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 use std::io;
+use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "encrypted")]
 use crypto::signature::Keypair;
@@ -22,19 +22,19 @@ use crypto::signature::Keypair;
 #[derive(Debug, Default)]
 #[non_exhaustive]
 pub struct ServerConfig {
-	pub log_errors: bool
+	pub log_errors: bool,
 }
 
 pub struct Data {
 	cfg: ServerConfig,
-	inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>
+	inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
 impl Data {
 	fn new() -> Self {
 		Self {
 			cfg: ServerConfig::default(),
-			inner: HashMap::new()
+			inner: HashMap::new(),
 		}
 	}
 
@@ -43,24 +43,33 @@ impl Data {
 	}
 
 	pub fn exists<D>(&self) -> bool
-	where D: Any {
-		TypeId::of::<D>() == TypeId::of::<Session>() ||
-		self.inner.contains_key(&TypeId::of::<D>())
+	where
+		D: Any,
+	{
+		TypeId::of::<D>() == TypeId::of::<Session>()
+			|| self.inner.contains_key(&TypeId::of::<D>())
 	}
 
 	fn insert<D>(&mut self, data: D)
-	where D: Any + Send + Sync {
+	where
+		D: Any + Send + Sync,
+	{
 		self.inner.insert(data.type_id(), Box::new(data));
 	}
 
 	pub fn get<D>(&self) -> Option<&D>
-	where D: Any {
-		self.inner.get(&TypeId::of::<D>())
+	where
+		D: Any,
+	{
+		self.inner
+			.get(&TypeId::of::<D>())
 			.and_then(|a| a.downcast_ref())
 	}
 
 	pub fn get_or_sess<'a, D>(&'a self, sess: &'a Session) -> Option<&'a D>
-	where D: Any {
+	where
+		D: Any,
+	{
 		if TypeId::of::<D>() == TypeId::of::<Session>() {
 			<dyn Any>::downcast_ref(sess)
 		} else {
@@ -70,29 +79,32 @@ impl Data {
 }
 
 struct Requests<A, B> {
-	inner: HashMap<A, Box<dyn RequestHandler<B, Action=A> + Send + Sync>>
+	inner: HashMap<A, Box<dyn RequestHandler<B, Action = A> + Send + Sync>>,
 }
 
 impl<A, B> Requests<A, B>
-where A: Action {
+where
+	A: Action,
+{
 	fn new() -> Self {
 		Self {
-			inner: HashMap::new()
+			inner: HashMap::new(),
 		}
 	}
 
 	fn insert<H>(&mut self, handler: H)
-	where H: RequestHandler<B, Action=A> + Send + Sync + 'static {
+	where
+		H: RequestHandler<B, Action = A> + Send + Sync + 'static,
+	{
 		self.inner.insert(H::action(), Box::new(handler));
 	}
 
 	fn get(
 		&self,
-		action: &A
-	) -> Option<&Box<dyn RequestHandler<B, Action=A> + Send + Sync>> {
+		action: &A,
+	) -> Option<&Box<dyn RequestHandler<B, Action = A> + Send + Sync>> {
 		self.inner.get(action)
 	}
-
 }
 
 pub struct Server<A, B, L, More> {
@@ -100,19 +112,25 @@ pub struct Server<A, B, L, More> {
 	requests: Requests<A, B>,
 	data: Data,
 	cfg: Config,
-	more: More
+	more: More,
 }
 
 impl<A, B, L, More> Server<A, B, L, More>
-where A: Action {
+where
+	A: Action,
+{
 	pub fn register_request<H>(&mut self, handler: H)
-	where H: RequestHandler<B, Action=A> + Send + Sync + 'static {
+	where
+		H: RequestHandler<B, Action = A> + Send + Sync + 'static,
+	{
 		handler.validate_data(&self.data);
 		self.requests.insert(handler);
 	}
 
 	pub fn register_data<D>(&mut self, data: D)
-	where D: Any + Send + Sync {
+	where
+		D: Any + Send + Sync,
+	{
 		self.data.insert(data);
 	}
 }
@@ -120,7 +138,7 @@ where A: Action {
 impl<A, B, L, More> Server<A, B, L, More>
 where
 	A: Action,
-	L: Listener
+	L: Listener,
 {
 	/// If this is set to true
 	/// errors which are returned in `#[api(*)]` functions are logged to tracing
@@ -132,13 +150,13 @@ where
 	pub fn build(self) -> BuiltServer<A, B, L, More> {
 		let shared = Arc::new(Shared {
 			requests: self.requests,
-			data: self.data
+			data: self.data,
 		});
 
 		BuiltServer {
 			inner: self.inner,
 			shared,
-			more: self.more
+			more: self.more,
 		}
 	}
 }
@@ -146,7 +164,7 @@ where
 impl<A, L> Server<A, PlainBytes, L, ()>
 where
 	A: Action,
-	L: Listener
+	L: Listener,
 {
 	pub fn new(listener: L, cfg: Config) -> Self {
 		Self {
@@ -154,19 +172,20 @@ where
 			requests: Requests::new(),
 			data: Data::new(),
 			cfg,
-			more: ()
+			more: (),
 		}
 	}
 
 	pub async fn run(self) -> io::Result<()>
-	where A: Send + Sync + 'static {
+	where
+		A: Send + Sync + 'static,
+	{
 		let cfg = self.cfg.clone();
 
-		self.build().run_raw(|_, stream| {
-			Connection::new(stream, cfg.clone())
-		}).await
+		self.build()
+			.run_raw(|_, stream| Connection::new(stream, cfg.clone()))
+			.await
 	}
-
 }
 
 #[cfg(feature = "encrypted")]
@@ -174,7 +193,7 @@ where
 impl<A, L> Server<A, EncryptedBytes, L, Keypair>
 where
 	A: Action,
-	L: Listener
+	L: Listener,
 {
 	pub fn new_encrypted(listener: L, cfg: Config, key: Keypair) -> Self {
 		Self {
@@ -182,17 +201,21 @@ where
 			requests: Requests::new(),
 			data: Data::new(),
 			cfg,
-			more: key
+			more: key,
 		}
 	}
 
 	pub async fn run(self) -> io::Result<()>
-	where A: Send + Sync + 'static {
+	where
+		A: Send + Sync + 'static,
+	{
 		let cfg = self.cfg.clone();
 
-		self.build().run_raw(move |key, stream| {
-			Connection::new_encrypted(stream, cfg.clone(), key.clone())
-		}).await
+		self.build()
+			.run_raw(move |key, stream| {
+				Connection::new_encrypted(stream, cfg.clone(), key.clone())
+			})
+			.await
 	}
 }
 
@@ -200,39 +223,40 @@ where
 
 struct Shared<A, B> {
 	requests: Requests<A, B>,
-	data: Data
+	data: Data,
 }
 
 pub struct BuiltServer<A, B, L, More> {
 	inner: L,
 	shared: Arc<Shared<A, B>>,
-	more: More
+	more: More,
 }
 
 impl<A, B, L, More> BuiltServer<A, B, L, More>
 where
 	A: Action,
-	L: Listener
+	L: Listener,
 {
 	pub fn get_data<D>(&self) -> Option<&D>
-	where D: Any {
+	where
+		D: Any,
+	{
 		self.shared.data.get()
 	}
 
 	pub async fn request<R>(
 		&self,
 		r: R,
-		session: &Arc<Session>
+		session: &Arc<Session>,
 	) -> Result<R::Response, R::Error>
 	where
-		R: Request<Action=A>,
+		R: Request<Action = A>,
 		R: IntoMessage<A, B>,
 		R::Response: FromMessage<A, B>,
 		R::Error: FromMessage<A, B>,
-		B: PacketBytes
+		B: PacketBytes,
 	{
-		let mut msg = r.into_message()
-			.map_err(R::Error::from_message_error)?;
+		let mut msg = r.into_message().map_err(R::Error::from_message_error)?;
 		msg.header_mut().set_action(R::ACTION);
 
 		// handle the request
@@ -246,40 +270,33 @@ where
 			None => {
 				tracing::error!("no handler for {:?}", action);
 				return Err(R::Error::from_request_error(
-					RequestError::NoResponse
-				))
+					RequestError::NoResponse,
+				));
 			}
 		};
 
-		let r = handler.handle(
-			msg,
-			&self.shared.data,
-			session
-		).await;
+		let r = handler.handle(msg, &self.shared.data, session).await;
 
 		let res = match r {
 			Ok(mut msg) => {
 				msg.header_mut().set_action(action);
 				msg
-			},
+			}
 			Err(e) => {
 				// todo once we bump the version again
 				// we need to pass our own errors via packets
 				// not only those from the api users
-				tracing::error!(
-					"handler returned an error {:?}", e
-				);
+				tracing::error!("handler returned an error {:?}", e);
 
 				return Err(R::Error::from_request_error(
-					RequestError::NoResponse
-				))
+					RequestError::NoResponse,
+				));
 			}
 		};
 
 		// now deserialize the response
 		if res.is_success() {
-			R::Response::from_message(res)
-				.map_err(R::Error::from_message_error)
+			R::Response::from_message(res).map_err(R::Error::from_message_error)
 		} else {
 			R::Error::from_message(res)
 				.map(Err)
@@ -291,10 +308,9 @@ where
 	where
 		A: Action + Send + Sync + 'static,
 		B: PacketBytes + Send + 'static,
-		F: Fn(&More, L::Stream) -> Connection<Message<A, B>>
+		F: Fn(&More, L::Stream) -> Connection<Message<A, B>>,
 	{
 		loop {
-
 			// should we fail here??
 			let (stream, addr) = self.inner.accept().await?;
 
@@ -309,7 +325,7 @@ where
 					let (msg, resp) = match req {
 						server::Message::Request(msg, resp) => (msg, resp),
 						// ignore streams for now
-						_ => continue
+						_ => continue,
 					};
 
 					let share = share.clone();
@@ -322,7 +338,7 @@ where
 						// not only those from the api users
 						None => {
 							tracing::error!("invalid action received");
-							continue
+							continue;
 						}
 					};
 
@@ -337,24 +353,22 @@ where
 								return;
 							}
 						};
-						let r = handler.handle(
-							msg,
-							&share.data,
-							&session
-						).await;
+						let r =
+							handler.handle(msg, &share.data, &session).await;
 
 						match r {
 							Ok(mut msg) => {
 								msg.header_mut().set_action(action);
 								// i don't care about the response
 								let _ = resp.send(msg);
-							},
+							}
 							Err(e) => {
 								// todo once we bump the version again
 								// we need to pass our own errors via packets
 								// not only those from the api users
 								tracing::error!(
-									"handler returned an error {:?}", e
+									"handler returned an error {:?}",
+									e
 								);
 							}
 						}
@@ -368,14 +382,14 @@ where
 pub struct Session {
 	// (SocketAddr, S)
 	addr: SocketAddr,
-	data: Mutex<HashMap<TypeId, Box<dyn Any + Send + Sync>>>
+	data: Mutex<HashMap<TypeId, Box<dyn Any + Send + Sync>>>,
 }
 
 impl Session {
 	pub fn new(addr: SocketAddr) -> Self {
 		Self {
 			addr,
-			data: Mutex::new(HashMap::new())
+			data: Mutex::new(HashMap::new()),
 		}
 	}
 
@@ -384,73 +398,85 @@ impl Session {
 	}
 
 	pub fn set<D>(&self, data: D)
-	where D: Any + Send + Sync {
-		self.data.lock().unwrap()
+	where
+		D: Any + Send + Sync,
+	{
+		self.data
+			.lock()
+			.unwrap()
 			.insert(data.type_id(), Box::new(data));
 	}
 
 	pub fn get<D>(&self) -> Option<D>
-	where D: Any + Clone + Send + Sync {
-		self.data.lock().unwrap()
+	where
+		D: Any + Clone + Send + Sync,
+	{
+		self.data
+			.lock()
+			.unwrap()
 			.get(&TypeId::of::<D>())
 			.and_then(|d| d.downcast_ref())
 			.map(Clone::clone)
 	}
 
 	pub fn take<D>(&self) -> Option<D>
-	where D: Any + Send + Sync {
-		self.data.lock().unwrap()
+	where
+		D: Any + Send + Sync,
+	{
+		self.data
+			.lock()
+			.unwrap()
 			.remove(&TypeId::of::<D>())
 			.and_then(|d| d.downcast().ok())
 			.map(|b| *b)
 	}
 }
 
-
 #[cfg(all(test, feature = "json"))]
 mod json_tests {
 	use super::*;
 
-	use codegen::{IntoMessage, FromMessage, api};
-	use crate::request::Request;
-	use crate::message;
 	use crate::error;
+	use crate::message;
+	use crate::request::Request;
+	use codegen::{api, FromMessage, IntoMessage};
 
 	use std::fmt;
 
-	use stream::util::testing::PanicListener;
+	use lafere::util::testing::PanicListener;
 
-	use serde::{Serialize, Deserialize};
-
+	use serde::{Deserialize, Serialize};
 
 	#[derive(Debug, Serialize, Deserialize, IntoMessage, FromMessage)]
 	#[message(json)]
 	struct TestReq {
-		hello: u64
+		hello: u64,
 	}
 
 	#[derive(Debug, Serialize, Deserialize, IntoMessage, FromMessage)]
 	#[message(json)]
 	struct TestReq2 {
-		hello: u64
+		hello: u64,
 	}
 
 	#[derive(Debug, Serialize, Deserialize, IntoMessage, FromMessage)]
 	#[message(json)]
 	struct TestResp {
-		hi: u64
+		hi: u64,
 	}
 
 	#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 	pub enum Action {
-		Empty
+		Empty,
 	}
 
-	#[derive(Debug, Clone, Serialize, Deserialize, IntoMessage, FromMessage)]
+	#[derive(
+		Debug, Clone, Serialize, Deserialize, IntoMessage, FromMessage,
+	)]
 	#[message(json)]
 	pub enum Error {
 		RequestError(String),
-		MessageError(String)
+		MessageError(String),
 	}
 
 	impl fmt::Display for Error {
@@ -472,8 +498,12 @@ mod json_tests {
 	}
 
 	impl message::Action for Action {
-		fn from_u16(_num: u16) -> Option<Self> { todo!() }
-		fn as_u16(&self) -> u16 { todo!() }
+		fn from_u16(_num: u16) -> Option<Self> {
+			todo!()
+		}
+		fn as_u16(&self) -> u16 {
+			todo!()
+		}
 	}
 
 	impl Request for TestReq {
@@ -495,27 +525,24 @@ mod json_tests {
 	#[api(TestReq)]
 	async fn test(req: TestReq) -> Result<TestResp, Error> {
 		println!("req {:?}", req);
-		Ok(TestResp {
-			hi: req.hello
-		})
+		Ok(TestResp { hi: req.hello })
 	}
 
 	#[api(TestReq2)]
-	async fn test_2(
-		req: TestReq2
-	) -> Result<TestResp, Error> {
+	async fn test_2(req: TestReq2) -> Result<TestResp, Error> {
 		println!("req {:?}", req);
-		Ok(TestResp {
-			hi: req.hello
-		})
+		Ok(TestResp { hi: req.hello })
 	}
 
 	#[tokio::test]
 	async fn test_direct_request() {
-		let mut server = Server::new(PanicListener::new(), Config {
-			timeout: std::time::Duration::from_millis(10),
-			body_limit: 4096
-		});
+		let mut server = Server::new(
+			PanicListener::new(),
+			Config {
+				timeout: std::time::Duration::from_millis(10),
+				body_limit: 4096,
+			},
+		);
 
 		server.register_data(String::from("global String"));
 
@@ -523,44 +550,47 @@ mod json_tests {
 		server.register_request(test_2);
 
 		let server = server.build();
-		let session = Arc::new(Session::new(
-			SocketAddr::V4("127.0.0.1:8080".parse().unwrap())
-		));
+		let session = Arc::new(Session::new(SocketAddr::V4(
+			"127.0.0.1:8080".parse().unwrap(),
+		)));
 
-		let r = server.request(TestReq { hello: 100 }, &session).await.unwrap();
+		let r = server
+			.request(TestReq { hello: 100 }, &session)
+			.await
+			.unwrap();
 		assert_eq!(r.hi, 100);
 
-		let r = server.request(
-			TestReq2 { hello: 100 },
-			&session
-		).await.unwrap();
+		let r = server
+			.request(TestReq2 { hello: 100 }, &session)
+			.await
+			.unwrap();
 		assert_eq!(r.hi, 100);
 
 		assert_eq!(server.get_data::<String>().unwrap(), "global String");
 	}
 }
 
-
 #[cfg(all(test, feature = "protobuf"))]
 mod protobuf_tests {
-	use codegen::{IntoMessage, FromMessage};
+	use codegen::{FromMessage, IntoMessage};
 
-	use fire_protobuf::{EncodeMessage, DecodeMessage};
+	use protopuffer::{DecodeMessage, EncodeMessage};
 
-
-	#[derive(Debug, Default)]
-	#[derive(EncodeMessage, DecodeMessage, IntoMessage, FromMessage)]
+	#[derive(
+		Debug, Default, EncodeMessage, DecodeMessage, IntoMessage, FromMessage,
+	)]
 	#[message(protobuf)]
 	struct TestReq {
 		#[field(1)]
-		hello: u64
+		hello: u64,
 	}
 
-	#[derive(Debug, Default)]
-	#[derive(EncodeMessage, DecodeMessage, IntoMessage, FromMessage)]
+	#[derive(
+		Debug, Default, EncodeMessage, DecodeMessage, IntoMessage, FromMessage,
+	)]
 	#[message(protobuf)]
 	struct TestReq2 {
 		#[field(1)]
-		hello: u64
+		hello: u64,
 	}
 }

@@ -3,20 +3,18 @@ use crate::error::MessageError;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use stream::packet::{
-	self, Flags, Packet,
-	PacketHeader, BodyBytes, BodyBytesMut, PacketError
+pub use lafere::packet::PacketBytes;
+use lafere::packet::{
+	self, BodyBytes, BodyBytesMut, Flags, Packet, PacketError, PacketHeader,
 };
-pub use stream::packet::PacketBytes;
 
 use bytes::{Bytes, BytesMut, BytesRead, BytesWrite};
-
 
 /// ## Important
 /// the number *zero* is not allowed to be used
 pub trait Action: Debug + Copy + Eq + Hash {
 	/// should try to convert an u16 to the action
-	/// 
+	///
 	/// 0 will never be passed as num
 	fn from_u16(num: u16) -> Option<Self>;
 
@@ -35,17 +33,16 @@ pub trait FromMessage<A, B>: Sized {
 	fn from_message(msg: Message<A, B>) -> Result<Self, MessageError>;
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Message<A, B> {
 	header: Header<A>,
-	bytes: B
+	bytes: B,
 }
 
 impl<A, B> Message<A, B>
 where
 	A: Action,
-	B: PacketBytes
+	B: PacketBytes,
 {
 	pub fn new() -> Self {
 		Self::empty()
@@ -53,7 +50,9 @@ where
 }
 
 impl<A, B> Message<A, B>
-where B: PacketBytes {
+where
+	B: PacketBytes,
+{
 	pub fn set_success(&mut self, success: bool) {
 		self.header.msg_flags.set_success(success);
 	}
@@ -75,7 +74,7 @@ impl<A, B> Message<A, B> {
 	pub fn action(&self) -> Option<&A> {
 		match &self.header.action {
 			MaybeAction::Action(a) => Some(a),
-			_ => None
+			_ => None,
 		}
 	}
 }
@@ -95,7 +94,7 @@ impl<A, B> FromMessage<A, B> for Message<A, B> {
 impl<A, B> Packet<B> for Message<A, B>
 where
 	A: Action,
-	B: PacketBytes
+	B: PacketBytes,
 {
 	type Header = Header<A>;
 
@@ -110,13 +109,13 @@ where
 	fn empty() -> Self {
 		Self {
 			header: Self::Header::empty(),
-			bytes: B::new(Self::Header::LEN as usize)
+			bytes: B::new(Self::Header::LEN as usize),
 		}
 	}
 
 	fn from_bytes_and_header(
 		bytes: B,
-		header: Self::Header
+		header: Self::Header,
 	) -> packet::Result<Self> {
 		// todo probably check if the action is correct
 		Ok(Self { header, bytes })
@@ -136,18 +135,20 @@ pub struct Header<A> {
 	flags: Flags,
 	msg_flags: MessageFlags,
 	id: u32,
-	action: MaybeAction<A>
+	action: MaybeAction<A>,
 }
 
 impl<A> Header<A>
-where A: Action {
+where
+	A: Action,
+{
 	pub fn empty() -> Self {
 		Self {
 			body_len: 0,
 			flags: Flags::empty(),
 			msg_flags: MessageFlags::new(true),
 			id: 0,
-			action: MaybeAction::None
+			action: MaybeAction::None,
 		}
 	}
 
@@ -165,7 +166,9 @@ where A: Action {
 }
 
 impl<A> PacketHeader for Header<A>
-where A: Action {
+where
+	A: Action,
+{
 	const LEN: u32 = 4 + 1 + 1 + 4 + 2;
 
 	fn from_bytes(mut bytes: Bytes) -> packet::Result<Self> {
@@ -188,12 +191,12 @@ where A: Action {
 				} else {
 					MaybeAction::Unknown(action_num)
 				}
-			}
+			},
 		};
 
 		if let Some(max) = A::max_body_size(&me) {
 			if me.body_len > max {
-				return Err(PacketError::BodyLimitReached(max))
+				return Err(PacketError::BodyLimitReached(max));
 			}
 		}
 
@@ -229,7 +232,7 @@ where A: Action {
 /// +----------+---------+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct MessageFlags {
-	inner: u8
+	inner: u8,
 }
 
 impl MessageFlags {
@@ -269,16 +272,18 @@ enum MaybeAction<A> {
 	/// zero will never be here
 	Unknown(u16),
 	/// Represented as 0
-	None
+	None,
 }
 
 impl<A> MaybeAction<A>
-where A: Action {
+where
+	A: Action,
+{
 	pub fn as_u16(&self) -> u16 {
 		match self {
 			Self::Action(a) => a.as_u16(),
 			Self::Unknown(u) => *u,
-			Self::None => 0
+			Self::None => 0,
 		}
 	}
 }
@@ -287,12 +292,12 @@ where A: Action {
 mod tests {
 	use super::*;
 
-	use stream::packet::PlainBytes;
+	use lafere::packet::PlainBytes;
 
 	#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 	enum SomeAction {
 		One,
-		Two
+		Two,
 	}
 
 	impl Action for SomeAction {
@@ -300,14 +305,14 @@ mod tests {
 			match num {
 				1 => Some(Self::One),
 				2 => Some(Self::Two),
-				_ => None
+				_ => None,
 			}
 		}
 
 		fn as_u16(&self) -> u16 {
 			match self {
 				Self::One => 1,
-				Self::Two => 2
+				Self::Two => 2,
 			}
 		}
 	}

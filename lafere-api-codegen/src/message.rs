@@ -1,25 +1,27 @@
-use crate::util::fire_api_crate;
+use crate::util::lafere_api_crate;
 
 use proc_macro2::{Span, TokenStream};
-use syn::{
-	DeriveInput, Error, Ident, Generics, Attribute, TypeGenerics, WhereClause
-};
 use quote::{quote, ToTokens};
-
+use syn::{
+	Attribute, DeriveInput, Error, Generics, Ident, TypeGenerics, WhereClause,
+};
 
 pub(crate) fn into_expand(input: DeriveInput) -> Result<TokenStream, Error> {
-	let DeriveInput { attrs, ident, generics, .. } = input;
+	let DeriveInput {
+		attrs,
+		ident,
+		generics,
+		..
+	} = input;
 
 	let attr = MsgAttribute::from_attrs(&attrs)?;
 	let encdec_module = attr.module;
 
-	let fire = fire_api_crate()?;
+	let fire = lafere_api_crate()?;
 	let message = quote!(#fire::message);
 
-	let (impl_generics, ty_generics, where_clause) = split_generics(
-		&generics,
-		&fire
-	);
+	let (impl_generics, ty_generics, where_clause) =
+		split_generics(&generics, &fire);
 
 	Ok(quote!(
 		impl #impl_generics #message::IntoMessage<A, B> for #ident #ty_generics
@@ -37,18 +39,21 @@ pub(crate) fn into_expand(input: DeriveInput) -> Result<TokenStream, Error> {
 }
 
 pub(crate) fn from_expand(input: DeriveInput) -> Result<TokenStream, Error> {
-	let DeriveInput { attrs, ident, generics, .. } = input;
+	let DeriveInput {
+		attrs,
+		ident,
+		generics,
+		..
+	} = input;
 
 	let attr = MsgAttribute::from_attrs(&attrs)?;
 	let encdec_module = attr.module;
 
-	let fire = fire_api_crate()?;
+	let fire = lafere_api_crate()?;
 	let message = quote!(#fire::message);
 
-	let (impl_generics, ty_generics, where_clause) = split_generics(
-		&generics,
-		&fire
-	);
+	let (impl_generics, ty_generics, where_clause) =
+		split_generics(&generics, &fire);
 
 	Ok(quote!(
 		impl #impl_generics #message::FromMessage<A, B> for #ident #ty_generics
@@ -62,10 +67,9 @@ pub(crate) fn from_expand(input: DeriveInput) -> Result<TokenStream, Error> {
 	))
 }
 
-
 struct MsgAttribute {
 	/// which module should be used to convert the types
-	pub module: Ident
+	pub module: Ident,
 }
 
 impl MsgAttribute {
@@ -74,32 +78,34 @@ impl MsgAttribute {
 
 		for attr in attrs {
 			if !attr.path().is_ident("message") {
-				continue
+				continue;
 			}
 
 			module = Some(attr.parse_args()?);
 		}
 
 		Ok(Self {
-			module: module.ok_or_else(|| Error::new(
-				Span::call_site(),
-				"need an attribute #[message(..)]"
-			))?
+			module: module.ok_or_else(|| {
+				Error::new(
+					Span::call_site(),
+					"need an attribute #[message(..)]",
+				)
+			})?,
 		})
 	}
 }
 
 fn split_generics<'a>(
 	generics: &'a Generics,
-	fire: &TokenStream
+	fire: &TokenStream,
 ) -> (ImplGenerics, TypeGenerics<'a>, Option<&'a WhereClause>) {
 	let mut impl_generics = generics.clone();
-	impl_generics.params.push(
-		syn::parse2(quote!(A: #fire::message::Action)).unwrap()
-	);
-	impl_generics.params.push(
-		syn::parse2(quote!(B: #fire::message::PacketBytes)).unwrap()
-	);
+	impl_generics
+		.params
+		.push(syn::parse2(quote!(A: #fire::message::Action)).unwrap());
+	impl_generics
+		.params
+		.push(syn::parse2(quote!(B: #fire::message::PacketBytes)).unwrap());
 
 	let (_, ty_generics, where_clause) = generics.split_for_impl();
 	(ImplGenerics(impl_generics), ty_generics, where_clause)

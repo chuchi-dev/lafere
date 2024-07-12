@@ -1,15 +1,15 @@
 [package]
-name = "fire-stream-api-codegen"
-description = "Codegen for fire stream api"
-version = "0.1.6"
+name = "lafere-api-codegen"
+description = "Codegen for lafere api"
+version = "0.1.0"
 authors = ["Sören Meier <info@soerenmeier.ch>"]
-repository = "https://github.com/fire-lib/fire-stream"
+repository = "https://github.com/chuchi-dev/lafere"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 rust-version = "1.67"
 
 [lib]
-proc_macro = true
+proc-macro = true
 
 [dependencies]
 proc-macro2 = "1.0"

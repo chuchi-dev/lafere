@@ -1,9 +1,8 @@
-use std::fmt;
-use std::error::Error as StdError;
 use std::borrow::Cow;
+use std::error::Error as StdError;
+use std::fmt;
 
-pub use stream::error::RequestError;
-
+pub use lafere::error::RequestError;
 
 /// The error that is sent if something goes wrong while responding
 /// to a request.
@@ -13,11 +12,10 @@ pub trait ApiError: StdError {
 	fn from_message_error(e: MessageError) -> Self;
 }
 
-
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
-	MessageError(MessageError)
+	MessageError(MessageError),
 }
 
 impl From<MessageError> for Error {
@@ -41,10 +39,10 @@ pub enum MessageError {
 	Json(serde_json::Error),
 	// Protobuf
 	#[cfg(feature = "protobuf")]
-	EncodeError(fire_protobuf::encode::EncodeError),
+	EncodeError(protopuffer::encode::EncodeError),
 	#[cfg(feature = "protobuf")]
-	DecodeError(fire_protobuf::decode::DecodeError),
-	Other(Cow<'static, str>)
+	DecodeError(protopuffer::decode::DecodeError),
+	Other(Cow<'static, str>),
 }
 
 impl fmt::Display for MessageError {

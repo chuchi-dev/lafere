@@ -1,9 +1,9 @@
-use std::time::Duration;
 use std::net::SocketAddr;
+use std::time::Duration;
 
-use fire_stream_api::{
-	server::{Server, Config as ServerConfig},
-	client::{Client, Config as ClientConfig}
+use lafere_api::{
+	client::{Client, Config as ClientConfig},
+	server::{Config as ServerConfig, Server},
 };
 
 use tokio::net::{TcpListener, TcpStream};
@@ -13,28 +13,36 @@ use crypto::signature::Keypair;
 mod api {
 	use std::fmt;
 
-	use serde::{Serialize, Deserialize};
+	use serde::{Deserialize, Serialize};
 
-	use fire_stream_api::{
-		IntoMessage, FromMessage, Action,
-		error::{ApiError, RequestError, MessageError},
+	use lafere_api::{
+		error::{ApiError, MessageError, RequestError},
+		message::{FromMessage, IntoMessage, Message, PacketBytes},
 		request::Request,
-		message::{IntoMessage, FromMessage, Message, PacketBytes}
+		Action, FromMessage, IntoMessage,
 	};
 
 	#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Action)]
 	#[repr(u16)]
 	pub enum Action {
-		RawReq = 1
+		RawReq = 1,
 	}
 
-	#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-	#[derive(IntoMessage, FromMessage)]
+	#[derive(
+		Debug,
+		Clone,
+		PartialEq,
+		Eq,
+		Serialize,
+		Deserialize,
+		IntoMessage,
+		FromMessage,
+	)]
 	#[message(json)]
 	pub enum Error {
 		MyError,
 		RequestError(String),
-		MessageError(String)
+		MessageError(String),
 	}
 
 	impl ApiError for Error {
@@ -58,7 +66,7 @@ mod api {
 	// raw requests
 	#[derive(Debug, Clone)]
 	pub struct RawReq<B> {
-		inner: Message<Action, B>
+		inner: Message<Action, B>,
 	}
 
 	impl<B: PacketBytes> RawReq<B> {
@@ -66,9 +74,7 @@ mod api {
 			let mut msg = Message::new();
 			msg.body_mut().resize(len);
 
-			Self {
-				inner: msg
-			}
+			Self { inner: msg }
 		}
 
 		pub fn body_len(&self) -> usize {
@@ -77,23 +83,29 @@ mod api {
 	}
 
 	impl<B> IntoMessage<Action, B> for RawReq<B>
-	where B: PacketBytes {
+	where
+		B: PacketBytes,
+	{
 		fn into_message(self) -> Result<Message<Action, B>, MessageError> {
 			Ok(self.inner)
 		}
 	}
 
 	impl<B> FromMessage<Action, B> for RawReq<B>
-	where B: PacketBytes {
+	where
+		B: PacketBytes,
+	{
 		fn from_message(msg: Message<Action, B>) -> Result<Self, MessageError> {
 			Ok(Self { inner: msg })
 		}
 	}
 
-	#[derive(Debug, Clone, Serialize, Deserialize, IntoMessage, FromMessage)]
+	#[derive(
+		Debug, Clone, Serialize, Deserialize, IntoMessage, FromMessage,
+	)]
 	#[message(json)]
 	pub struct RawResp {
-		pub status: String
+		pub status: String,
 	}
 
 	impl<B> Request for RawReq<B> {
@@ -108,17 +120,19 @@ mod api {
 mod handlers {
 	use crate::api::*;
 
-	use fire_stream_api::{api};
-
+	use lafere_api::api;
 
 	type Result<T> = std::result::Result<T, Error>;
 
 	#[api(RawReq<B>)]
 	pub fn raw_request(req: RawReq<B>) -> Result<RawResp> {
-		Ok(RawResp { status: format!("worked {}", req.body_len()) })
+		Ok(RawResp {
+			status: format!("worked {}", req.body_len()),
+		})
 	}
 }
 
+#[allow(dead_code)]
 struct MyAddr(SocketAddr);
 
 #[tokio::test]
@@ -132,10 +146,14 @@ async fn main() {
 
 	tokio::spawn(async move {
 		// spawn server
-		let mut server = Server::new_encrypted(listener, ServerConfig {
-			timeout: Duration::from_secs(10),
-			body_limit: 0
-		}, priv_key);
+		let mut server = Server::new_encrypted(
+			listener,
+			ServerConfig {
+				timeout: Duration::from_secs(10),
+				body_limit: 0,
+			},
+			priv_key,
+		);
 
 		server.register_data(my_addr);
 		server.register_request(handlers::raw_request);
@@ -145,10 +163,15 @@ async fn main() {
 
 	// now connect
 	let stream = TcpStream::connect(addr.clone()).await.unwrap();
-	let client = Client::new_encrypted(stream, ClientConfig {
-		timeout: Duration::from_secs(10),
-		body_limit: 0
-	}, None, pub_key);
+	let client = Client::new_encrypted(
+		stream,
+		ClientConfig {
+			timeout: Duration::from_secs(10),
+			body_limit: 0,
+		},
+		None,
+		pub_key,
+	);
 
 	let e = client.request(api::RawReq::new(10)).await.unwrap();
 	assert_eq!(e.status, "worked 10");
