@@ -1,47 +1,52 @@
-use crate::util::{
-	fire_protobuf_crate, variants_no_fields, repr_as_i32, variants_with_fields
-};
 use crate::attr::FieldAttr;
+use crate::util::{
+	protopuffer_crate, repr_as_i32, variants_no_fields, variants_with_fields,
+};
 
 use proc_macro2::TokenStream;
-use syn::{
-	DeriveInput, Error, Attribute, Ident, Generics, Data, DataStruct, DataEnum,
-	Fields
-};
 use quote::quote;
-
+use syn::{
+	Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Fields,
+	Generics, Ident,
+};
 
 pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream, Error> {
-	let DeriveInput { attrs, ident, generics, data, .. } = input;
+	let DeriveInput {
+		attrs,
+		ident,
+		generics,
+		data,
+		..
+	} = input;
 
 	match data {
 		Data::Struct(d) => expand_struct(ident, generics, d),
 		Data::Enum(e) => expand_enum(attrs, ident, generics, e),
-		Data::Union(_) => Err(Error::new(ident.span(), "union not supported"))
+		Data::Union(_) => Err(Error::new(ident.span(), "union not supported")),
 	}
 }
-
 
 fn expand_struct(
 	ident: Ident,
 	generics: Generics,
-	d: DataStruct
+	d: DataStruct,
 ) -> Result<TokenStream, Error> {
 	let fields = match d.fields {
 		Fields::Named(f) => f.named,
-		_ => return Err(Error::new(ident.span(), "only named structs"))
+		_ => return Err(Error::new(ident.span(), "only named structs")),
 	};
 
 	if !generics.params.is_empty() {
-		return Err(Error::new_spanned(generics, "generics not supported"))
+		return Err(Error::new_spanned(generics, "generics not supported"));
 	}
 
 	// parse fields
-	let fields: Vec<_> = fields.into_iter()
+	let fields: Vec<_> = fields
+		.into_iter()
 		.map(|f| Ok((FieldAttr::from_attrs(&f.attrs)?, f)))
 		.collect::<Result<_, Error>>()?;
 
-	let fire = fire_protobuf_crate()?;
+	let fire = protopuffer_crate()?;
 	let fire_decode = quote!(#fire::decode);
 
 	// the wire type for structs is always len
@@ -52,13 +57,12 @@ fn expand_struct(
 
 	let dectrait = quote!(#fire_decode::DecodeMessage);
 
-	let default_fields = fields.iter()
-		.map(|(_, f)| {
-			let id = &f.ident;
-			quote!(
-				#id: #dectrait::decode_default()
-			)
-		});
+	let default_fields = fields.iter().map(|(_, f)| {
+		let id = &f.ident;
+		quote!(
+			#id: #dectrait::decode_default()
+		)
+	});
 
 	let decode_default = quote!(
 		fn decode_default() -> Self {
@@ -68,14 +72,13 @@ fn expand_struct(
 		}
 	);
 
-	let merge_fields = fields.iter()
-		.map(|(attr, f)| {
-			let id = &f.ident;
-			let fieldnum = &attr.fieldnum;
-			quote!(
-				#fieldnum => #dectrait::merge(&mut self.#id, field.kind, true)?
-			)
-		});
+	let merge_fields = fields.iter().map(|(attr, f)| {
+		let id = &f.ident;
+		let fieldnum = &attr.fieldnum;
+		quote!(
+			#fieldnum => #dectrait::merge(&mut self.#id, field.kind, true)?
+		)
+	});
 
 	let trailing_comma = if fields.is_empty() {
 		quote!()
@@ -106,7 +109,6 @@ fn expand_struct(
 		}
 	);
 
-
 	Ok(quote!(
 		impl<'m> #dectrait<'m> for #ident {
 			#wire_type_const
@@ -120,7 +122,7 @@ fn expand_enum(
 	attrs: Vec<Attribute>,
 	ident: Ident,
 	generics: Generics,
-	d: DataEnum
+	d: DataEnum,
 ) -> Result<TokenStream, Error> {
 	let repr_as_i32 = repr_as_i32(attrs)?;
 
@@ -135,17 +137,17 @@ fn expand_enum(
 fn expand_enum_no_fields(
 	ident: Ident,
 	generics: Generics,
-	d: DataEnum
+	d: DataEnum,
 ) -> Result<TokenStream, Error> {
 	if !generics.params.is_empty() {
-		return Err(Error::new_spanned(generics, "generics not supported"))
+		return Err(Error::new_spanned(generics, "generics not supported"));
 	}
 
 	// (fieldnum, ident)
 	let (variants, default_variant) = variants_no_fields(d.variants)?;
 	let default_variant = default_variant.1;
 
-	let fire = fire_protobuf_crate()?;
+	let fire = protopuffer_crate()?;
 	let fire_decode = quote!(#fire::decode);
 
 	// the wire type for structs is always len
@@ -156,7 +158,8 @@ fn expand_enum_no_fields(
 
 	let dectrait = quote!(#fire_decode::DecodeMessage);
 
-	let merge_variants: Vec<_> = variants.iter()
+	let merge_variants: Vec<_> = variants
+		.iter()
 		.map(|(num, id)| quote!(#num => Self::#id))
 		.collect();
 
@@ -196,20 +199,21 @@ fn expand_enum_no_fields(
 fn expand_enum_with_fields(
 	ident: Ident,
 	generics: Generics,
-	d: DataEnum
+	d: DataEnum,
 ) -> Result<TokenStream, Error> {
 	if !generics.params.is_empty() {
-		return Err(Error::new_spanned(generics, "generics not supported"))
+		return Err(Error::new_spanned(generics, "generics not supported"));
 	}
 
 	// (FieldAttr, ident, Option<field>)
 	let variants = variants_with_fields(d.variants)?;
-	let default_variant = variants.iter()
+	let default_variant = variants
+		.iter()
 		.find(|(attr, _, _)| attr.default.is_some())
 		// variants check that one field is the default
 		.unwrap();
 
-	let fire = fire_protobuf_crate()?;
+	let fire = protopuffer_crate()?;
 	let fire_decode = quote!(#fire::decode);
 
 	// the wire type for structs is always len
@@ -238,8 +242,8 @@ fn expand_enum_with_fields(
 		}
 	);
 
-
-	let match_fields: Vec<_> = variants.iter()
+	let match_fields: Vec<_> = variants
+		.iter()
 		.map(|(attr, ident, field)| {
 			let fieldnum = &attr.fieldnum;
 

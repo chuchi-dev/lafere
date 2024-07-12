@@ -1,4 +1,4 @@
-use bytes::{BytesRead, ReadError, BytesWrite, WriteError};
+use bytes::{BytesRead, BytesWrite, ReadError, WriteError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Varint(pub u64);
@@ -17,7 +17,7 @@ impl Varint {
 			// has most significant bit
 			msb = b & 0b1000_0000 > 0;
 			if !msb {
-				break
+				break;
 			}
 		}
 
@@ -31,7 +31,7 @@ impl Varint {
 
 	pub fn write<W: BytesWrite>(
 		&self,
-		writer: &mut W
+		writer: &mut W,
 	) -> Result<(), WriteError> {
 		let mut val: u64 = self.0;
 
@@ -48,7 +48,7 @@ impl Varint {
 			writer.try_write_u8(b)?;
 
 			if !msb {
-				break
+				break;
 			}
 		}
 
@@ -62,7 +62,6 @@ impl Varint {
 		bytes.max(1)
 	}
 }
-
 
 #[cfg(test)]
 mod tests {

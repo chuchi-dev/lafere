@@ -1,6 +1,6 @@
-mod encode;
-mod decode;
 mod attr;
+mod decode;
+mod encode;
 mod util;
 
 use proc_macro::TokenStream;

@@ -1,9 +1,8 @@
-use crate::test_util::{Wrapper, TestWriter, WireType};
+use crate::test_util::{TestWriter, WireType, Wrapper};
 
 #[test]
 fn vec() {
-	TestWriter::new()
-		.cmp::<Wrapper<Vec<String>>>(Wrapper(vec![]));
+	TestWriter::new().cmp::<Wrapper<Vec<String>>>(Wrapper(vec![]));
 
 	TestWriter::new()
 		.write_tag(1, WireType::Len)
@@ -20,8 +19,7 @@ fn vec() {
 		.write_bytes(b"e")
 		.cmp::<Wrapper<Vec<String>>>(Wrapper(vec!["t".into(), "e".into()]));
 
-	TestWriter::new()
-		.cmp::<Wrapper<Vec<Vec<String>>>>(Wrapper(vec![]));
+	TestWriter::new().cmp::<Wrapper<Vec<Vec<String>>>>(Wrapper(vec![]));
 
 	TestWriter::new()
 		.write_tag(1, WireType::Len)
@@ -53,8 +51,7 @@ fn vec() {
 
 #[test]
 fn vec_packed() {
-	TestWriter::new()
-		.cmp::<Wrapper<Vec<u32>>>(Wrapper(vec![]));
+	TestWriter::new().cmp::<Wrapper<Vec<u32>>>(Wrapper(vec![]));
 
 	TestWriter::new()
 		.write_tag(1, WireType::Varint)
@@ -68,8 +65,7 @@ fn vec_packed() {
 		.write_varint(2)
 		.cmp::<Wrapper<Vec<u32>>>(Wrapper(vec![1, 2]));
 
-	TestWriter::new()
-		.cmp::<Wrapper<Vec<Vec<u32>>>>(Wrapper(vec![]));
+	TestWriter::new().cmp::<Wrapper<Vec<Vec<u32>>>>(Wrapper(vec![]));
 
 	TestWriter::new()
 		.write_tag(1, WireType::Len)
@@ -108,8 +104,7 @@ fn vec_packed() {
 
 #[test]
 fn option() {
-	TestWriter::new()
-		.cmp::<Wrapper<Option<String>>>(Wrapper(None));
+	TestWriter::new().cmp::<Wrapper<Option<String>>>(Wrapper(None));
 
 	TestWriter::new()
 		.write_tag(1, WireType::Len)
@@ -130,9 +125,9 @@ fn option() {
 		.write_tag(1, WireType::Len)
 		.write_len(1)
 		.write_bytes(b"t")
-		.cmp::<Wrapper<Option<Option<String>>>>(
-			Wrapper(Some(Some("t".into())))
-		);
+		.cmp::<Wrapper<Option<Option<String>>>>(Wrapper(Some(Some(
+			"t".into(),
+		))));
 
 	TestWriter::new()
 		.write_tag(1, WireType::Varint)

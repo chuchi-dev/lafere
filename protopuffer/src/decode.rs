@@ -1,12 +1,11 @@
-use crate::WireType;
 use crate::varint::Varint;
+use crate::WireType;
 
+use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
-use std::collections::HashMap;
 
 use bytes::{Bytes, BytesRead, BytesReadRef};
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -22,7 +21,7 @@ pub enum DecodeError {
 	ExpectedLenWireType,
 	ExpectedUtf8,
 	ExpectedArrayLen(usize),
-	Other(String)
+	Other(String),
 }
 
 impl fmt::Display for DecodeError {
@@ -33,21 +32,21 @@ impl fmt::Display for DecodeError {
 			Self::InvalidVarint => write!(f, "varint is invalid"),
 			Self::InvalidWireType(t) => {
 				write!(f, "the wiretype {t} is invalid")
-			},
+			}
 			Self::WireTypeMismatch => write!(f, "wire types don't match"),
 			Self::ExpectedVarintWireType => {
 				write!(f, "expected a varint wire type")
-			},
+			}
 			Self::ExpectedI32WireType => write!(f, "expected a i32 wire type"),
 			Self::ExpectedI64WireType => write!(f, "expected a i64 wire type"),
 			Self::ExpectedLenWireType => {
 				write!(f, "expected the len wire type")
-			},
+			}
 			Self::ExpectedUtf8 => write!(f, "expected a valid utf8 string"),
 			Self::ExpectedArrayLen(n) => {
 				write!(f, "expected an array length of {n}")
-			},
-			Self::Other(s) => write!(f, "decode error: {s}")
+			}
+			Self::Other(s) => write!(f, "decode error: {s}"),
 		}
 	}
 }
@@ -56,13 +55,13 @@ impl std::error::Error for DecodeError {}
 
 #[derive(Debug)]
 pub struct MessageDecoder<'a> {
-	inner: Bytes<'a>
+	inner: Bytes<'a>,
 }
 
 impl<'a> MessageDecoder<'a> {
 	pub fn new(bytes: &'a [u8]) -> Self {
 		Self {
-			inner: Bytes::from(bytes)
+			inner: Bytes::from(bytes),
 		}
 	}
 
@@ -78,21 +77,25 @@ impl<'a> MessageDecoder<'a> {
 
 	fn next_kind(
 		&mut self,
-		ty: WireType
+		ty: WireType,
 	) -> Result<FieldKind<'a>, DecodeError> {
 		let kind = match ty {
 			WireType::Varint => FieldKind::Varint(self.next_varint()?),
 			WireType::I64 => FieldKind::I64(
-				self.inner.try_read_le_u64()
-					.map_err(|_| DecodeError::UnexpectedEof)?
+				self.inner
+					.try_read_le_u64()
+					.map_err(|_| DecodeError::UnexpectedEof)?,
 			),
 			WireType::I32 => FieldKind::I32(
-				self.inner.try_read_le_u32()
-					.map_err(|_| DecodeError::UnexpectedEof)?
+				self.inner
+					.try_read_le_u32()
+					.map_err(|_| DecodeError::UnexpectedEof)?,
 			),
 			WireType::Len => {
 				let len = self.next_varint()?;
-				let bytes = self.inner.try_read_ref(len as usize)
+				let bytes = self
+					.inner
+					.try_read_ref(len as usize)
 					.map_err(|_| DecodeError::UnexpectedEof)?;
 
 				FieldKind::Len(bytes)
@@ -105,10 +108,10 @@ impl<'a> MessageDecoder<'a> {
 	/// should only be used for reading packed values
 	pub(crate) fn maybe_next_kind(
 		&mut self,
-		ty: WireType
+		ty: WireType,
 	) -> Result<Option<FieldKind<'a>>, DecodeError> {
 		if self.inner.remaining().is_empty() {
-			return Ok(None)
+			return Ok(None);
 		}
 
 		self.next_kind(ty).map(Some)
@@ -118,7 +121,7 @@ impl<'a> MessageDecoder<'a> {
 	/// more fields
 	pub fn next(&mut self) -> Result<Option<Field<'a>>, DecodeError> {
 		if self.inner.remaining().is_empty() {
-			return Ok(None)
+			return Ok(None);
 		}
 
 		let tag = self.next_varint()?;
@@ -142,7 +145,7 @@ impl<'a> MessageDecoder<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Field<'a> {
 	pub number: u64,
-	pub kind: FieldKind<'a>
+	pub kind: FieldKind<'a>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -157,8 +160,8 @@ pub enum FieldKind<'a> {
 	// backwards compatible:
 	// - fixed64, sfixed64
 	I64(u64),
-	
-	Len(&'a [u8])
+
+	Len(&'a [u8]),
 }
 
 impl<'a> FieldKind<'a> {
@@ -171,28 +174,28 @@ impl<'a> FieldKind<'a> {
 			Self::Varint(_) => WireType::Varint,
 			Self::I32(_) => WireType::I32,
 			Self::I64(_) => WireType::I64,
-			Self::Len(_) => WireType::Len
+			Self::Len(_) => WireType::Len,
 		}
 	}
 
 	pub fn try_unwrap_varint(&self) -> Result<u64, DecodeError> {
 		match self {
 			Self::Varint(n) => Ok(*n),
-			_ => Err(DecodeError::ExpectedVarintWireType)
+			_ => Err(DecodeError::ExpectedVarintWireType),
 		}
 	}
 
 	pub fn try_unwrap_i32(&self) -> Result<u32, DecodeError> {
 		match self {
 			Self::I32(n) => Ok(*n),
-			_ => Err(DecodeError::ExpectedI32WireType)
+			_ => Err(DecodeError::ExpectedI32WireType),
 		}
 	}
 
 	pub fn try_unwrap_i64(&self) -> Result<u64, DecodeError> {
 		match self {
 			Self::I64(n) => Ok(*n),
-			_ => Err(DecodeError::ExpectedI64WireType)
+			_ => Err(DecodeError::ExpectedI64WireType),
 		}
 	}
 
@@ -200,21 +203,21 @@ impl<'a> FieldKind<'a> {
 	pub fn try_unwrap_len(&self) -> Result<&'a [u8], DecodeError> {
 		match self {
 			Self::Len(b) => Ok(b),
-			_ => Err(DecodeError::ExpectedLenWireType)
+			_ => Err(DecodeError::ExpectedLenWireType),
 		}
 	}
 }
 
-
-
 pub trait DecodeMessage<'m> {
 	/// This field is just a hint, merge might accept another type
-	/// 
+	///
 	/// mostly this is used for detecting if we can pack a message
 	const WIRE_TYPE: WireType;
 
 	fn parse_from_bytes(b: &'m [u8]) -> Result<Self, DecodeError>
-	where Self: Sized {
+	where
+		Self: Sized,
+	{
 		let mut this = Self::decode_default();
 
 		this.merge(FieldKind::Len(b), false)?;
@@ -225,23 +228,24 @@ pub trait DecodeMessage<'m> {
 	fn decode_default() -> Self;
 
 	/// kind does not need to be the same as Self::WIRE_TYPE
-	/// 
+	///
 	/// is_field is true if this message is a field of a struct or enum
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,
-		is_field: bool
+		is_field: bool,
 	) -> Result<(), DecodeError>;
 }
 
 pub trait DecodeMessageOwned: for<'m> DecodeMessage<'m> {}
 
-impl<T> DecodeMessageOwned for T
-where T: for<'m> DecodeMessage<'m> {}
+impl<T> DecodeMessageOwned for T where T: for<'m> DecodeMessage<'m> {}
 
 // a vec is represented as repeated ty = 1;
 impl<'m, V> DecodeMessage<'m> for Vec<V>
-where V: DecodeMessage<'m> {
+where
+	V: DecodeMessage<'m>,
+{
 	const WIRE_TYPE: WireType = WireType::Len;
 
 	fn decode_default() -> Self {
@@ -251,7 +255,7 @@ where V: DecodeMessage<'m> {
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,
-		is_field: bool
+		is_field: bool,
 	) -> Result<(), DecodeError> {
 		// if this is not a field
 		// we need to create a struct / message
@@ -261,7 +265,7 @@ where V: DecodeMessage<'m> {
 
 			while let Some(field) = parser.next()? {
 				if field.number != 1 {
-					continue
+					continue;
 				}
 
 				// were now in a field of our virtual message/struct
@@ -281,9 +285,8 @@ where V: DecodeMessage<'m> {
 				self.push(v);
 			}
 
-			return parser.finish()
+			return parser.finish();
 		}
-
 
 		let mut v = V::decode_default();
 		v.merge(kind, false)?;
@@ -297,7 +300,7 @@ where V: DecodeMessage<'m> {
 impl<'m, K, V> DecodeMessage<'m> for HashMap<K, V>
 where
 	K: DecodeMessage<'m> + Eq + Hash,
-	V: DecodeMessage<'m>
+	V: DecodeMessage<'m>,
 {
 	const WIRE_TYPE: WireType = WireType::Len;
 
@@ -308,7 +311,7 @@ where
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,
-		is_field: bool
+		is_field: bool,
 	) -> Result<(), DecodeError> {
 		// if this is not a field
 		// we need to create a struct / message
@@ -318,7 +321,7 @@ where
 
 			while let Some(field) = parser.next()? {
 				if field.number != 1 {
-					continue
+					continue;
 				}
 
 				// were now in a field of our virtual message/struct
@@ -347,7 +350,7 @@ impl<'m> DecodeMessage<'m> for Vec<u8> {
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,
-		_is_field: bool
+		_is_field: bool,
 	) -> Result<(), DecodeError> {
 		let bytes = kind.try_unwrap_len()?;
 		self.clear();
@@ -367,12 +370,12 @@ impl<'m, const S: usize> DecodeMessage<'m> for [u8; S] {
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,
-		_is_field: bool
+		_is_field: bool,
 	) -> Result<(), DecodeError> {
 		let bytes = kind.try_unwrap_len()?;
 
 		if bytes.len() != S {
-			return Err(DecodeError::ExpectedArrayLen(S))
+			return Err(DecodeError::ExpectedArrayLen(S));
 		}
 
 		self.copy_from_slice(bytes);
@@ -422,36 +425,11 @@ macro_rules! impl_tuple {
 // impl_tuple![
 // 	A, 0
 // ];
-impl_tuple![
-	A, 0,
-	B, 1
-];
-impl_tuple![
-	A, 0,
-	B, 1,
-	C, 2
-];
-impl_tuple![
-	A, 0,
-	B, 1,
-	C, 2,
-	D, 3
-];
-impl_tuple![
-	A, 0,
-	B, 1,
-	C, 2,
-	D, 3,
-	E, 4
-];
-impl_tuple![
-	A, 0,
-	B, 1,
-	C, 2,
-	D, 3,
-	E, 4,
-	F, 5
-];
+impl_tuple![A, 0, B, 1];
+impl_tuple![A, 0, B, 1, C, 2];
+impl_tuple![A, 0, B, 1, C, 2, D, 3];
+impl_tuple![A, 0, B, 1, C, 2, D, 3, E, 4];
+impl_tuple![A, 0, B, 1, C, 2, D, 3, E, 4, F, 5];
 
 impl<'m> DecodeMessage<'m> for String {
 	const WIRE_TYPE: WireType = WireType::Len;
@@ -463,7 +441,7 @@ impl<'m> DecodeMessage<'m> for String {
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,
-		_is_field: bool
+		_is_field: bool,
 	) -> Result<(), DecodeError> {
 		let bytes = kind.try_unwrap_len()?;
 		self.clear();
@@ -476,7 +454,9 @@ impl<'m> DecodeMessage<'m> for String {
 }
 
 impl<'m, V> DecodeMessage<'m> for Option<V>
-where V: DecodeMessage<'m> {
+where
+	V: DecodeMessage<'m>,
+{
 	const WIRE_TYPE: WireType = WireType::Len;
 
 	fn decode_default() -> Self {
@@ -486,7 +466,7 @@ where V: DecodeMessage<'m> {
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,
-		is_field: bool
+		is_field: bool,
 	) -> Result<(), DecodeError> {
 		// if this is not a field
 		// we need to create a struct / message
@@ -496,7 +476,7 @@ where V: DecodeMessage<'m> {
 
 			while let Some(field) = parser.next()? {
 				if field.number != 1 {
-					continue
+					continue;
 				}
 
 				// were now in a field of our virtual message/struct
@@ -531,7 +511,7 @@ impl<'m> DecodeMessage<'m> for bool {
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,
-		_is_field: bool
+		_is_field: bool,
 	) -> Result<(), DecodeError> {
 		let num = kind.try_unwrap_varint()?;
 		*self = num != 0;
@@ -589,10 +569,7 @@ macro_rules! impl_floats {
 	)*)
 }
 
-impl_floats![
-	try_unwrap_i32, I32 as f32,
-	try_unwrap_i64, I64 as f64
-];
+impl_floats![try_unwrap_i32, I32 as f32, try_unwrap_i64, I64 as f64];
 
 #[repr(transparent)]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -652,10 +629,15 @@ macro_rules! impl_fixed {
 }
 
 impl_fixed![
-	try_unwrap_i32, I32 as u32, try_unwrap_i32, I32 as i32,
-	try_unwrap_i64, I64 as u64, try_unwrap_i64, I64 as i64
+	try_unwrap_i32,
+	I32 as u32,
+	try_unwrap_i32,
+	I32 as i32,
+	try_unwrap_i64,
+	I64 as u64,
+	try_unwrap_i64,
+	I64 as i64
 ];
-
 
 #[cfg(test)]
 mod tests {
@@ -669,10 +651,16 @@ mod tests {
 
 		let mut parser = MessageDecoder::new(MSG);
 
-		let hello_str = Field { number: 4, kind: FieldKind::Len(b"hello") };
+		let hello_str = Field {
+			number: 4,
+			kind: FieldKind::Len(b"hello"),
+		};
 		assert_eq!(parser.next().unwrap().unwrap(), hello_str);
 
-		let mut repeated = Field { number: 5, kind: FieldKind::Varint(1) };
+		let mut repeated = Field {
+			number: 5,
+			kind: FieldKind::Varint(1),
+		};
 
 		assert_eq!(parser.next().unwrap().unwrap(), repeated);
 		repeated.kind = FieldKind::Varint(2);
@@ -693,7 +681,7 @@ mod tests {
 		assert_eq!(packed.number, 6);
 		let packed = match packed.kind {
 			FieldKind::Len(p) => p,
-			_ => panic!()
+			_ => panic!(),
 		};
 
 		let mut parser = MessageDecoder::new(packed);
@@ -728,9 +716,8 @@ mod tests {
 	}
 	*/
 
-
 	// struct Test {
-		
+
 	// }
 
 	// impl Message for Test {
@@ -740,8 +727,4 @@ mod tests {
 
 	// 	fn merge_field(&self, )
 	// }
-
-
-
-
 }

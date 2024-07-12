@@ -1,17 +1,16 @@
-use std::fmt::Debug;
 use std::collections::HashMap;
+use std::fmt::Debug;
 
-use fire_protobuf::{EncodeMessage, DecodeMessage};
-use fire_protobuf::encode::EncodeMessage;
-use fire_protobuf::decode::DecodeMessage;
-
+use protopuffer::decode::DecodeMessage;
+use protopuffer::encode::EncodeMessage;
+use protopuffer::{DecodeMessage, EncodeMessage};
 
 #[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
 struct Test1 {
 	#[field(1)]
 	s: String,
 	#[field(5)]
-	some_struct: Test2
+	some_struct: Test2,
 }
 
 #[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
@@ -25,7 +24,7 @@ struct Test2 {
 	#[field(6)]
 	map: HashMap<String, Test4>,
 	#[field(200)]
-	test4: Test4
+	test4: Test4,
 }
 
 /// is internaly represented as
@@ -39,7 +38,7 @@ enum Test3 {
 	#[field(1)]
 	One(String),
 	#[field(2, default)]
-	Two
+	Two,
 }
 
 #[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
@@ -47,12 +46,11 @@ enum Test3 {
 enum Test4 {
 	Unknown = 0,
 	One = 1,
-	Two = 2
+	Two = 2,
 }
 
 #[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
 struct Test5 {}
-
 
 #[cfg(test)]
 mod tests {
@@ -93,9 +91,11 @@ mod tests {
 			tupls: (10, 20),
 			map: [
 				("abc".to_string(), Test4::One),
-				("bcde".to_string(), Test4::Two)
-			].into_iter().collect(),
-			test4: Test4::One
+				("bcde".to_string(), Test4::Two),
+			]
+			.into_iter()
+			.collect(),
+			test4: Test4::One,
 		};
 		let bytes = test2.write_to_bytes().unwrap();
 		let n_test2 = Test2::parse_from_bytes(&bytes).unwrap();
@@ -111,8 +111,8 @@ mod tests {
 				compl_enum: Test3::Two,
 				tupls: (10, 20),
 				map: HashMap::new(),
-				test4: Test4::Two
-			}
+				test4: Test4::Two,
+			},
 		};
 		let bytes = test1.write_to_bytes().unwrap();
 		let n_test1 = Test1::parse_from_bytes(&bytes).unwrap();

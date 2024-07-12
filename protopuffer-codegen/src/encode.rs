@@ -1,45 +1,50 @@
-use crate::util::{
-	fire_protobuf_crate, repr_as_i32, variants_no_fields, variants_with_fields
-};
 use crate::attr::FieldAttr;
+use crate::util::{
+	protopuffer_crate, repr_as_i32, variants_no_fields, variants_with_fields,
+};
 
 use std::iter;
 
 use proc_macro2::TokenStream;
-use syn::{
-	DeriveInput, Error, Ident, Generics, Data, DataStruct, DataEnum,
-	Fields, Attribute
-};
 use quote::quote;
-
+use syn::{
+	Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Fields,
+	Generics, Ident,
+};
 
 pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream, Error> {
-	let DeriveInput { attrs, ident, generics, data, .. } = input;
+	let DeriveInput {
+		attrs,
+		ident,
+		generics,
+		data,
+		..
+	} = input;
 
 	match data {
 		Data::Struct(d) => expand_struct(ident, generics, d),
 		Data::Enum(e) => expand_enum(attrs, ident, generics, e),
-		Data::Union(_) => Err(Error::new(ident.span(), "union not supported"))
+		Data::Union(_) => Err(Error::new(ident.span(), "union not supported")),
 	}
 }
-
 
 fn expand_struct(
 	ident: Ident,
 	generics: Generics,
-	d: DataStruct
+	d: DataStruct,
 ) -> Result<TokenStream, Error> {
 	let fields = match d.fields {
 		Fields::Named(f) => f.named,
-		_ => return Err(Error::new(ident.span(), "only named structs"))
+		_ => return Err(Error::new(ident.span(), "only named structs")),
 	};
 
 	// parse fields
-	let fields: Vec<_> = fields.into_iter()
+	let fields: Vec<_> = fields
+		.into_iter()
 		.map(|f| Ok((FieldAttr::from_attrs(&f.attrs)?, f)))
 		.collect::<Result<_, Error>>()?;
 
-	let fire = fire_protobuf_crate()?;
+	let fire = protopuffer_crate()?;
 	let fire_encode = quote!(#fire::encode);
 
 	// the wire type for structs is always len
@@ -50,7 +55,8 @@ fn expand_struct(
 
 	let enctrait = quote!(#fire_encode::EncodeMessage);
 
-	let encoded_size_fields: Vec<_> = fields.iter()
+	let encoded_size_fields: Vec<_> = fields
+		.iter()
 		.map(|(attr, f)| {
 			let id = &f.ident;
 			let fieldnum = &attr.fieldnum;
@@ -89,8 +95,8 @@ fn expand_struct(
 		}
 	);
 
-
-	let encode_fields: Vec<_> = fields.iter()
+	let encode_fields: Vec<_> = fields
+		.iter()
 		.map(|(attr, f)| {
 			let id = &f.ident;
 			let fieldnum = &attr.fieldnum;
@@ -105,7 +111,6 @@ fn expand_struct(
 			)
 		})
 		.collect();
-
 
 	let encode = quote!(
 		fn encode<B>(
@@ -156,7 +161,6 @@ fn expand_struct(
 
 	let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-
 	Ok(quote!(
 		impl #impl_generics #enctrait for #ident #ty_generics #where_clause {
 			#wire_type_const
@@ -171,7 +175,7 @@ fn expand_enum(
 	attrs: Vec<Attribute>,
 	ident: Ident,
 	generics: Generics,
-	d: DataEnum
+	d: DataEnum,
 ) -> Result<TokenStream, Error> {
 	let repr_as_i32 = repr_as_i32(attrs)?;
 
@@ -185,12 +189,12 @@ fn expand_enum(
 fn expand_enum_no_fields(
 	ident: Ident,
 	generics: Generics,
-	d: DataEnum
+	d: DataEnum,
 ) -> Result<TokenStream, Error> {
 	// (fieldnum, ident)
 	let (variants, default_variant) = variants_no_fields(d.variants)?;
 
-	let fire = fire_protobuf_crate()?;
+	let fire = protopuffer_crate()?;
 	let fire_encode = quote!(#fire::encode);
 
 	// the wire type for structs is always len
@@ -201,7 +205,8 @@ fn expand_enum_no_fields(
 
 	let enctrait = quote!(#fire_encode::EncodeMessage);
 
-	let match_variants: Vec<_> = variants.iter()
+	let match_variants: Vec<_> = variants
+		.iter()
 		.chain(iter::once(&default_variant))
 		.map(|(num, ident)| quote!(Self::#ident => #num))
 		.collect();
@@ -268,12 +273,12 @@ fn expand_enum_no_fields(
 fn expand_enum_with_fields(
 	ident: Ident,
 	generics: Generics,
-	d: DataEnum
+	d: DataEnum,
 ) -> Result<TokenStream, Error> {
 	// (FieldAttr, ident, Option<field>)
 	let variants = variants_with_fields(d.variants)?;
 
-	let fire = fire_protobuf_crate()?;
+	let fire = protopuffer_crate()?;
 	let fire_encode = quote!(#fire::encode);
 
 	// the wire type for structs is always len
@@ -284,7 +289,8 @@ fn expand_enum_with_fields(
 
 	let enctrait = quote!(#fire_encode::EncodeMessage);
 
-	let encoded_size_variants: Vec<_> = variants.iter()
+	let encoded_size_variants: Vec<_> = variants
+		.iter()
 		.map(|(attr, ident, field)| {
 			let fieldnum = &attr.fieldnum;
 
@@ -331,7 +337,8 @@ fn expand_enum_with_fields(
 		}
 	);
 
-	let encode_variants: Vec<_> = variants.iter()
+	let encode_variants: Vec<_> = variants
+		.iter()
 		.map(|(attr, ident, field)| {
 			let fieldnum = &attr.fieldnum;
 

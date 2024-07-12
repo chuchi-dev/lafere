@@ -4,7 +4,7 @@ A library to encode and decode data in the protobuf format. Supports derive.
 
 ## Example
 ```rust
-use fire_protobuf::{EncodeMessage, DecodeMessage, from_slice, to_vec};
+use protopuffer::{EncodeMessage, DecodeMessage, from_slice, to_vec};
 
 #[derive(Debug, PartialEq, Eq, EncodeMessage, DecodeMessage)]
 struct MyData {

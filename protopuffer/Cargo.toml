@@ -1,16 +1,16 @@
 [package]
-name = "fire-protobuf"
+name = "protopuffer"
 description = "Rust only protobuf implementation"
-version = "0.1.5"
+version = "0.1.0"
 authors = ["Sören meier <info@soerenmeier.ch>"]
-repository = "https://github.com/fire-lib/fire-stream"
+repository = "https://github.com/chuchi-dev/lafere"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 rust-version = "1.64"
 
 [dependencies]
 bytes = { package = "simple-bytes", version = "0.2.14" }
-codegen = { package = "fire-protobuf-codegen", version = "0.1.3", path = "../fire-protobuf-codegen" }
+codegen = { package = "protopuffer-codegen", version = "0.1.0", path = "../protopuffer-codegen" }
 
 [dev-dependencies]
 hex-literal = "0.4"

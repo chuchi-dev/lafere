@@ -1,24 +1,23 @@
-use crate::WireType;
 use crate::varint::Varint;
+use crate::WireType;
 
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 
-use bytes::{BytesOwned, BytesWrite, BytesRead};
-
+use bytes::{BytesOwned, BytesRead, BytesWrite};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum EncodeError {
 	BufferExausted,
-	Other(String)
+	Other(String),
 }
 
 impl fmt::Display for EncodeError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::BufferExausted => write!(f, "the buffer was to small"),
-			Self::Other(s) => write!(f, "encode error: {s}")
+			Self::Other(s) => write!(f, "encode error: {s}"),
 		}
 	}
 }
@@ -27,14 +26,12 @@ impl std::error::Error for EncodeError {}
 
 #[derive(Debug)]
 pub struct MessageEncoder<B> {
-	inner: B
+	inner: B,
 }
 
 impl<B> MessageEncoder<B> {
 	pub fn new(inner: B) -> Self {
-		Self {
-			inner
-		}
+		Self { inner }
 	}
 
 	pub fn inner(&self) -> &B {
@@ -49,32 +46,37 @@ impl<B> MessageEncoder<B> {
 impl MessageEncoder<BytesOwned> {
 	pub fn new_owned() -> Self {
 		Self {
-			inner: BytesOwned::new()
+			inner: BytesOwned::new(),
 		}
 	}
 }
 
-
 impl<B> MessageEncoder<B>
-where B: BytesWrite {
+where
+	B: BytesWrite,
+{
 	pub fn write_tag(
 		&mut self,
 		fieldnum: u64,
-		wtype: WireType
+		wtype: WireType,
 	) -> Result<(), EncodeError> {
 		let mut tag = Varint(fieldnum << 3);
 		tag.0 |= wtype.as_num() as u64;
 
-		tag.write(&mut self.inner).map_err(|_| EncodeError::BufferExausted)
+		tag.write(&mut self.inner)
+			.map_err(|_| EncodeError::BufferExausted)
 	}
 
 	pub fn write_len(&mut self, len: u64) -> Result<(), EncodeError> {
-		Varint(len).write(&mut self.inner)
+		Varint(len)
+			.write(&mut self.inner)
 			.map_err(|_| EncodeError::BufferExausted)
 	}
 
 	pub fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
-		self.inner.try_write(bytes).map_err(|_| EncodeError::BufferExausted)
+		self.inner
+			.try_write(bytes)
+			.map_err(|_| EncodeError::BufferExausted)
 	}
 
 	pub fn written_len(&self) -> u64 {
@@ -82,23 +84,26 @@ where B: BytesWrite {
 	}
 
 	pub fn write_varint(&mut self, val: u64) -> Result<(), EncodeError> {
-		Varint(val).write(&mut self.inner)
+		Varint(val)
+			.write(&mut self.inner)
 			.map_err(|_| EncodeError::BufferExausted)
 	}
 
 	pub fn write_i32(&mut self, val: u32) -> Result<(), EncodeError> {
-		self.inner.try_write_le_u32(val)
+		self.inner
+			.try_write_le_u32(val)
 			.map_err(|_| EncodeError::BufferExausted)
 	}
 
 	pub fn write_i64(&mut self, val: u64) -> Result<(), EncodeError> {
-		self.inner.try_write_le_u64(val)
+		self.inner
+			.try_write_le_u64(val)
 			.map_err(|_| EncodeError::BufferExausted)
 	}
 
 	pub fn write_empty_field(
 		&mut self,
-		fieldnum: u64
+		fieldnum: u64,
 	) -> Result<(), EncodeError> {
 		self.write_tag(fieldnum, WireType::Len)?;
 		self.write_len(0)
@@ -113,21 +118,15 @@ impl From<MessageEncoder<BytesOwned>> for Vec<u8> {
 
 #[derive(Debug)]
 pub struct SizeBuilder {
-	inner: u64
+	inner: u64,
 }
 
 impl SizeBuilder {
 	pub fn new() -> Self {
-		Self {
-			inner: 0
-		}
+		Self { inner: 0 }
 	}
 
-	pub fn write_tag(
-		&mut self,
-		fieldnum: u64,
-		_wtype: WireType
-	) {
+	pub fn write_tag(&mut self, fieldnum: u64, _wtype: WireType) {
 		self.inner += Varint(fieldnum << 3).size();
 	}
 
@@ -165,14 +164,14 @@ impl SizeBuilder {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldOpt {
 	pub num: u64,
-	pub is_nested: bool
+	pub is_nested: bool,
 }
 
 impl FieldOpt {
 	pub const fn new(num: u64) -> Self {
 		Self {
 			num,
-			is_nested: false
+			is_nested: false,
 		}
 	}
 }
@@ -180,7 +179,7 @@ impl FieldOpt {
 /// ## Ignoring fields
 /// if your call tells you a field number you need to write it even if you
 /// have the default value
-/// 
+///
 /// You can only ignore writing fields if you wan't
 pub trait EncodeMessage {
 	fn write_to_bytes(&mut self) -> Result<Vec<u8>, EncodeError> {
@@ -198,28 +197,29 @@ pub trait EncodeMessage {
 	fn is_default(&self) -> bool;
 
 	/// how big will the size be after encoding
-	/// 
+	///
 	/// The that get's returned here needs to be the same as called in write
 	///
 	/// if fieldnum is set this means you *need* to write the tag
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError>;
 
 	/// In most cases before this is called encoded_size get's called
-	/// 
+	///
 	/// The size that get's computed in encoded_size must be the same as we get
 	/// here
-	/// 
+	///
 	/// if fieldnum is set this means you *need* to write the tag to
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite;
+	where
+		B: BytesWrite;
 }
 
 impl<V: EncodeMessage> EncodeMessage for &mut V {
@@ -232,7 +232,7 @@ impl<V: EncodeMessage> EncodeMessage for &mut V {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		(**self).encoded_size(field, builder)
 	}
@@ -240,15 +240,17 @@ impl<V: EncodeMessage> EncodeMessage for &mut V {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		(**self).encode(field, encoder)
 	}
 }
 
 macro_rules! impl_from_ref {
-	($ty:ty) => (
+	($ty:ty) => {
 		impl EncodeMessage for $ty {
 			const WIRE_TYPE: WireType = <&$ty>::WIRE_TYPE;
 
@@ -259,7 +261,7 @@ macro_rules! impl_from_ref {
 			fn encoded_size(
 				&mut self,
 				field: Option<FieldOpt>,
-				builder: &mut SizeBuilder
+				builder: &mut SizeBuilder,
 			) -> Result<(), EncodeError> {
 				(&mut &*self).encoded_size(field, builder)
 			}
@@ -267,18 +269,21 @@ macro_rules! impl_from_ref {
 			fn encode<B>(
 				&mut self,
 				field: Option<FieldOpt>,
-				encoder: &mut MessageEncoder<B>
+				encoder: &mut MessageEncoder<B>,
 			) -> Result<(), EncodeError>
-			where B: BytesWrite {
+			where
+				B: BytesWrite,
+			{
 				(&mut &*self).encode(field, encoder)
 			}
 		}
-	)
+	};
 }
 
-
 impl<V> EncodeMessage for Vec<V>
-where V: EncodeMessage {
+where
+	V: EncodeMessage,
+{
 	const WIRE_TYPE: WireType = WireType::Len;
 
 	fn is_default(&self) -> bool {
@@ -289,7 +294,7 @@ where V: EncodeMessage {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		self.as_mut_slice().encoded_size(field, builder)
 	}
@@ -297,15 +302,19 @@ where V: EncodeMessage {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		self.as_mut_slice().encode(field, encoder)
 	}
 }
 
 impl<V, const S: usize> EncodeMessage for [V; S]
-where V: EncodeMessage {
+where
+	V: EncodeMessage,
+{
 	const WIRE_TYPE: WireType = WireType::Len;
 
 	fn is_default(&self) -> bool {
@@ -316,7 +325,7 @@ where V: EncodeMessage {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		self.as_mut_slice().encoded_size(field, builder)
 	}
@@ -324,16 +333,19 @@ where V: EncodeMessage {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		self.as_mut_slice().encode(field, encoder)
 	}
 }
 
-
 impl<V> EncodeMessage for [V]
-where V: EncodeMessage {
+where
+	V: EncodeMessage,
+{
 	const WIRE_TYPE: WireType = WireType::Len;
 
 	fn is_default(&self) -> bool {
@@ -344,7 +356,7 @@ where V: EncodeMessage {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		// if we don't have a fieldnum we need to simulate a custom field
 		let field = field.unwrap_or(FieldOpt::new(1));
@@ -360,7 +372,7 @@ where V: EncodeMessage {
 
 			builder.write_len(size);
 			builder.write_bytes(size);
-			return Ok(())
+			return Ok(());
 		}
 
 		// if we are packed
@@ -376,14 +388,14 @@ where V: EncodeMessage {
 
 			builder.write_len(packed_size);
 			builder.write_bytes(packed_size);
-			return Ok(())
+			return Ok(());
 		}
 
 		// we need to create a field for every entry
 		for v in self.iter_mut() {
 			let field = FieldOpt {
 				num: field.num,
-				is_nested: true
+				is_nested: true,
 			};
 			v.encoded_size(Some(field), builder)?;
 		}
@@ -394,9 +406,11 @@ where V: EncodeMessage {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		// if we don't have a fieldnum we need to simulate a custom field
 		let field = field.unwrap_or(FieldOpt::new(1));
 
@@ -419,11 +433,13 @@ where V: EncodeMessage {
 			#[cfg(debug_assertions)]
 			{
 				let added_len = encoder.written_len() - prev_len;
-				assert_eq!(size, added_len as u64,
-					"size does not match real size");
+				assert_eq!(
+					size, added_len as u64,
+					"size does not match real size"
+				);
 			}
 
-			return Ok(())
+			return Ok(());
 		}
 
 		// if we are packed
@@ -449,18 +465,20 @@ where V: EncodeMessage {
 			#[cfg(debug_assertions)]
 			{
 				let added_len = encoder.written_len() - prev_len;
-				assert_eq!(packed_size, added_len as u64,
-					"size does not match real size");
+				assert_eq!(
+					packed_size, added_len as u64,
+					"size does not match real size"
+				);
 			}
 
-			return Ok(())
+			return Ok(());
 		}
 
 		// we need to create a field for every entry
 		for v in self.iter_mut() {
 			let field = FieldOpt {
 				num: field.num,
-				is_nested: true
+				is_nested: true,
 			};
 			v.encode(Some(field), encoder)?;
 		}
@@ -472,7 +490,7 @@ where V: EncodeMessage {
 impl<K, V> EncodeMessage for HashMap<K, V>
 where
 	for<'a> &'a K: EncodeMessage,
-	V: EncodeMessage
+	V: EncodeMessage,
 {
 	const WIRE_TYPE: WireType = WireType::Len;
 
@@ -484,7 +502,7 @@ where
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		// if we don't have a fieldnum we need to simulate a custom field
 		let field = field.unwrap_or(FieldOpt::new(1));
@@ -501,14 +519,14 @@ where
 
 			builder.write_len(size);
 			builder.write_bytes(size);
-			return Ok(())
+			return Ok(());
 		}
 
 		// we need to create a field for every entry
 		for (k, v) in self.iter_mut() {
 			let field = FieldOpt {
 				num: field.num,
-				is_nested: true
+				is_nested: true,
 			};
 			(k, v).encoded_size(Some(field), builder)?;
 		}
@@ -519,9 +537,11 @@ where
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		// if we don't have a fieldnum we need to simulate a custom field
 		let field = field.unwrap_or(FieldOpt::new(1));
 
@@ -544,18 +564,20 @@ where
 			#[cfg(debug_assertions)]
 			{
 				let added_len = encoder.written_len() - prev_len;
-				assert_eq!(size, added_len as u64,
-					"size does not match real size");
+				assert_eq!(
+					size, added_len as u64,
+					"size does not match real size"
+				);
 			}
 
-			return Ok(())
+			return Ok(());
 		}
 
 		// we need to create a field for every entry
 		for (k, v) in self.iter_mut() {
 			let field = FieldOpt {
 				num: field.num,
-				is_nested: true
+				is_nested: true,
 			};
 			(k, v).encode(Some(field), encoder)?;
 		}
@@ -575,7 +597,7 @@ impl EncodeMessage for Vec<u8> {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		self.as_slice().encoded_size(field, builder)
 	}
@@ -583,9 +605,11 @@ impl EncodeMessage for Vec<u8> {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		self.as_slice().encode(field, encoder)
 	}
 }
@@ -601,7 +625,7 @@ impl<const S: usize> EncodeMessage for [u8; S] {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		self.as_slice().encoded_size(field, builder)
 	}
@@ -609,9 +633,11 @@ impl<const S: usize> EncodeMessage for [u8; S] {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		self.as_slice().encode(field, encoder)
 	}
 }
@@ -717,36 +743,11 @@ macro_rules! impl_tuple {
 // impl_tuple![
 // 	A, 0
 // ];
-impl_tuple![
-	A, 0,
-	B, 1
-];
-impl_tuple![
-	A, 0,
-	B, 1,
-	C, 2
-];
-impl_tuple![
-	A, 0,
-	B, 1,
-	C, 2,
-	D, 3
-];
-impl_tuple![
-	A, 0,
-	B, 1,
-	C, 2,
-	D, 3,
-	E, 4
-];
-impl_tuple![
-	A, 0,
-	B, 1,
-	C, 2,
-	D, 3,
-	E, 4,
-	F, 5
-];
+impl_tuple![A, 0, B, 1];
+impl_tuple![A, 0, B, 1, C, 2];
+impl_tuple![A, 0, B, 1, C, 2, D, 3];
+impl_tuple![A, 0, B, 1, C, 2, D, 3, E, 4];
+impl_tuple![A, 0, B, 1, C, 2, D, 3, E, 4, F, 5];
 
 impl_from_ref!([u8]);
 
@@ -761,7 +762,7 @@ impl EncodeMessage for &[u8] {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		writer: &mut SizeBuilder
+		writer: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		if let Some(field) = field {
 			writer.write_tag(field.num, Self::WIRE_TYPE);
@@ -776,9 +777,11 @@ impl EncodeMessage for &[u8] {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		writer: &mut MessageEncoder<B>
+		writer: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		if let Some(field) = field {
 			writer.write_tag(field.num, Self::WIRE_TYPE)?;
 			writer.write_len(self.len() as u64)?;
@@ -801,7 +804,7 @@ impl EncodeMessage for &String {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		self.as_bytes().encoded_size(field, builder)
 	}
@@ -809,9 +812,11 @@ impl EncodeMessage for &String {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		self.as_bytes().encode(field, encoder)
 	}
 }
@@ -827,7 +832,7 @@ impl EncodeMessage for &str {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		self.as_bytes().encoded_size(field, builder)
 	}
@@ -835,15 +840,19 @@ impl EncodeMessage for &str {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		self.as_bytes().encode(field, encoder)
 	}
 }
 
 impl<T> EncodeMessage for Option<T>
-where T: EncodeMessage {
+where
+	T: EncodeMessage,
+{
 	const WIRE_TYPE: WireType = WireType::Len;
 
 	fn is_default(&self) -> bool {
@@ -853,7 +862,7 @@ where T: EncodeMessage {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		let field = field.unwrap_or(FieldOpt::new(1));
 
@@ -867,27 +876,29 @@ where T: EncodeMessage {
 			builder.write_len(size);
 			builder.write_bytes(size);
 
-			return Ok(())
+			return Ok(());
 		}
 
 		match self {
 			Some(v) => v.encoded_size(
 				Some(FieldOpt {
 					num: field.num,
-					is_nested: true
+					is_nested: true,
 				}),
-				builder
+				builder,
 			),
-			None => Ok(())
+			None => Ok(()),
 		}
 	}
 
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		let field = field.unwrap_or(FieldOpt::new(1));
 
 		if field.is_nested {
@@ -907,22 +918,24 @@ where T: EncodeMessage {
 			#[cfg(debug_assertions)]
 			{
 				let added_len = encoder.written_len() - prev_len;
-				assert_eq!(size, added_len as u64,
-					"size does not match real size");
+				assert_eq!(
+					size, added_len as u64,
+					"size does not match real size"
+				);
 			}
 
-			return Ok(())
+			return Ok(());
 		}
 
 		match self {
 			Some(v) => v.encode(
 				Some(FieldOpt {
 					num: field.num,
-					is_nested: true
+					is_nested: true,
 				}),
-				encoder
+				encoder,
 			),
-			None => Ok(())
+			None => Ok(()),
 		}
 	}
 }
@@ -939,7 +952,7 @@ impl EncodeMessage for &bool {
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		if let Some(field) = field {
 			builder.write_tag(field.num, Self::WIRE_TYPE);
@@ -953,9 +966,11 @@ impl EncodeMessage for &bool {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		if let Some(field) = field {
 			encoder.write_tag(field.num, Self::WIRE_TYPE)?;
 		}
@@ -963,7 +978,6 @@ impl EncodeMessage for &bool {
 		encoder.write_varint(**self as u64)
 	}
 }
-
 
 // impl basic varint
 macro_rules! impl_varint {
@@ -1050,7 +1064,4 @@ macro_rules! impl_floats {
 	)*)
 }
 
-impl_floats![
-	write_i32, u32, I32 as f32,
-	write_i64, u64, I64 as f64
-];
+impl_floats![write_i32, u32, I32 as f32, write_i64, u64, I64 as f64];

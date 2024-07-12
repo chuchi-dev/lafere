@@ -1,26 +1,29 @@
-use crate::encode::{
-	EncodeMessage, MessageEncoder, EncodeError, FieldOpt, SizeBuilder
-};
-use crate::decode::{DecodeMessage, MessageDecoder, FieldKind, DecodeError};
 use crate::bytes::{BytesOwned, BytesRead, BytesWrite};
+use crate::decode::{DecodeError, DecodeMessage, FieldKind, MessageDecoder};
+use crate::encode::{
+	EncodeError, EncodeMessage, FieldOpt, MessageEncoder, SizeBuilder,
+};
 pub use crate::WireType;
 
 use std::fmt::Debug;
-
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Wrapper<T>(pub T);
 
 impl<T> EncodeMessage for Wrapper<T>
-where T: EncodeMessage {
+where
+	T: EncodeMessage,
+{
 	const WIRE_TYPE: WireType = WireType::Len;
 
-	fn is_default(&self) -> bool { false }
+	fn is_default(&self) -> bool {
+		false
+	}
 
 	fn encoded_size(
 		&mut self,
 		field: Option<FieldOpt>,
-		builder: &mut SizeBuilder
+		builder: &mut SizeBuilder,
 	) -> Result<(), EncodeError> {
 		let mut size = SizeBuilder::new();
 		self.0.encoded_size(Some(FieldOpt::new(1)), &mut size)?;
@@ -39,9 +42,11 @@ where T: EncodeMessage {
 	fn encode<B>(
 		&mut self,
 		field: Option<FieldOpt>,
-		encoder: &mut MessageEncoder<B>
+		encoder: &mut MessageEncoder<B>,
 	) -> Result<(), EncodeError>
-	where B: BytesWrite {
+	where
+		B: BytesWrite,
+	{
 		if let Some(field) = field {
 			encoder.write_tag(field.num, WireType::Len)?;
 
@@ -57,7 +62,9 @@ where T: EncodeMessage {
 }
 
 impl<'m, T> DecodeMessage<'m> for Wrapper<T>
-where T: DecodeMessage<'m> {
+where
+	T: DecodeMessage<'m>,
+{
 	const WIRE_TYPE: WireType = WireType::Len;
 
 	fn decode_default() -> Self {
@@ -67,7 +74,7 @@ where T: DecodeMessage<'m> {
 	fn merge(
 		&mut self,
 		kind: FieldKind<'m>,
-		_is_field: bool
+		_is_field: bool,
 	) -> Result<(), DecodeError> {
 		let mut decoder = MessageDecoder::try_from_kind(kind)?;
 
@@ -82,13 +89,13 @@ where T: DecodeMessage<'m> {
 }
 
 pub struct TestWriter {
-	inner: MessageEncoder<BytesOwned>
+	inner: MessageEncoder<BytesOwned>,
 }
 
 impl TestWriter {
 	pub fn new() -> Self {
 		Self {
-			inner: MessageEncoder::new_owned()
+			inner: MessageEncoder::new_owned(),
 		}
 	}
 
@@ -114,12 +121,13 @@ impl TestWriter {
 
 	#[track_caller]
 	pub fn cmp<T>(self, mut other: T) -> Self
-	where T: EncodeMessage + for<'a> DecodeMessage<'a> + Debug + Eq {
+	where
+		T: EncodeMessage + for<'a> DecodeMessage<'a> + Debug + Eq,
+	{
 		let n_bytes = other.write_to_bytes().unwrap();
 		assert_eq!(self.inner.inner().as_slice(), n_bytes);
 
-		let n_v = T::parse_from_bytes(self.inner.inner().as_slice())
-			.unwrap();
+		let n_v = T::parse_from_bytes(self.inner.inner().as_slice()).unwrap();
 		assert_eq!(other, n_v);
 
 		self
