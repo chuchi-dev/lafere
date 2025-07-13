@@ -1,12 +1,12 @@
 [package]
 name = "lafere-api"
 description = "A more or less simple communication protocol library."
-version = "0.1.0"
+version = "0.2.0-pre.0"
 authors = ["Sören meier <info@soerenmeier.ch>"]
 repository = "https://github.com/chuchi-dev/lafere"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.67"
+rust-version = "1.85"
 
 [[test]]
 name = "complete"
@@ -24,19 +24,19 @@ json = ["lafere/json", "serde", "serde_json"]
 protobuf = ["dep:protopuffer"]
 
 [dependencies]
-lafere = { version = "0.1.0", path = "../lafere", default-features = false }
-crypto = { package = "chuchi-crypto", version = "0.1", features = [
-    "cipher",
-    "signature",
+lafere = { version = "0.2.0-pre.0", path = "../lafere", default-features = false }
+crypto = { package = "chuchi-crypto", version = "0.2.0-pre.0", features = [
+	"cipher",
+	"signature",
 ], optional = true }
 bytes = { package = "simple-bytes", version = "0.2.6" }
 tokio = { version = "1.0", features = [
-    "net",
-    "io-util",
-    "time",
-    "sync",
+	"net",
+	"io-util",
+	"time",
+	"sync",
 ], optional = true }
-codegen = { package = "lafere-api-codegen", version = "0.1.0", path = "../lafere-api-codegen" }
+codegen = { package = "lafere-api-codegen", version = "0.2.0-pre.0", path = "../lafere-api-codegen" }
 tracing = "0.1"
 
 serde = { version = "1.0", optional = true }
@@ -46,12 +46,12 @@ protopuffer = { version = "0.1", path = "../protopuffer", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = [
-    "net",
-    "io-util",
-    "rt-multi-thread",
-    "time",
-    "macros",
-    "sync",
+	"net",
+	"io-util",
+	"rt-multi-thread",
+	"time",
+	"macros",
+	"sync",
 ] }
 serde = { version = "1.0", features = ["derive"] }
 

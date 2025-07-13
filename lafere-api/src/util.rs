@@ -112,5 +112,5 @@ pub fn get_data_as_owned<T: Any, R: Any>(
 #[inline]
 pub(crate) unsafe fn transform_owned<T: Any + Sized, R: Any>(from: R) -> T {
 	let mut from = ManuallyDrop::new(from);
-	(&mut from as *mut ManuallyDrop<R> as *mut T).read()
+	unsafe { (&mut from as *mut ManuallyDrop<R> as *mut T).read() }
 }

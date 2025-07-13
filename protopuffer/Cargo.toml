@@ -13,4 +13,4 @@ bytes = { package = "simple-bytes", version = "0.2.14" }
 codegen = { package = "protopuffer-codegen", version = "0.1.0", path = "../protopuffer-codegen" }
 
 [dev-dependencies]
-hex-literal = "0.4"
+hex-literal = "1.0"

@@ -1,12 +1,12 @@
 [package]
 name = "lafere"
 description = "A more or less simple communication protocol library."
-version = "0.1.0"
+version = "0.2.0-pre.0"
 authors = ["Sören meier <info@soerenmeier.ch>"]
 repository = "https://github.com/chuchi-dev/lafere"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.64"
+rust-version = "1.85"
 
 [[example]]
 name = "request_response"
@@ -21,18 +21,18 @@ fs = ["tokio/fs"]
 encrypted = ["crypto"]
 
 [dependencies]
-crypto = { package = "chuchi-crypto", version = "0.1", features = [
-    "cipher",
-    "signature",
+crypto = { package = "chuchi-crypto", version = "0.2.0-pre.0", features = [
+	"cipher",
+	"signature",
 ], optional = true }
 bytes = { package = "simple-bytes", version = "0.2.11" }
 tokio = { version = "1.0", features = [
-    "net",
-    "io-util",
-    "rt",
-    "time",
-    "sync",
-    "macros",
+	"net",
+	"io-util",
+	"rt",
+	"time",
+	"sync",
+	"macros",
 ], optional = true }
 serde = { version = "1.0", optional = true }
 serde_json = { version = "1.0", optional = true }
@@ -40,12 +40,12 @@ tracing = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1.0", features = [
-    "net",
-    "io-util",
-    "rt-multi-thread",
-    "time",
-    "macros",
-    "sync",
+	"net",
+	"io-util",
+	"rt-multi-thread",
+	"time",
+	"macros",
+	"sync",
 ] }
 
 [package.metadata.docs.rs]

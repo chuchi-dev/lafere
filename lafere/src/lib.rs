@@ -16,7 +16,7 @@ mod plain;
 #[cfg_attr(docsrs, doc(cfg(feature = "encrypted")))]
 mod encrypted;
 
-#[cfg(feature = "connection")]
+#[cfg(feature = "connection")] 
 pub mod client;
 #[cfg(feature = "connection")]
 pub mod server;

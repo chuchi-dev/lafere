@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,13 +13,12 @@ env:
 
 jobs:
   build_and_test:
-
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.67
+        uses: dtolnay/rust-toolchain@1.85
       - name: Build no features
         run: cargo build --no-default-features
       - name: Run tests no features
