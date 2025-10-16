@@ -1,6 +1,5 @@
 use crate::error::{RequestError, TaskError};
-use crate::handler::client::Sender;
-use crate::handler::{Configurator, TaskHandle, server::Receiver};
+use crate::handler::{Configurator, Receiver, Sender, TaskHandle};
 use crate::handler::{StreamReceiver, StreamSender};
 use crate::packet::{Packet, PlainBytes};
 use crate::plain;
@@ -27,7 +26,7 @@ pub struct Config {
 pub struct Connection<P> {
 	sender: Sender<P>,
 	sender_enabled: bool,
-	receiver: Receiver<P>,
+	receiver: Option<Receiver<P>>,
 	config: Configurator<Config>,
 	task: TaskHandle,
 }
@@ -75,14 +74,20 @@ impl<P> Connection<P> {
 		Self {
 			sender,
 			sender_enabled: false,
-			receiver,
+			receiver: Some(receiver),
 			config,
 			task,
 		}
 	}
 
+	pub fn take_receiver(&mut self) -> Option<Receiver<P>> {
+		self.receiver.take()
+	}
+
+	/// ## Panics
+	/// - If called when there is no receiver (e.g. after calling `take_receiver`)
 	pub async fn receive(&mut self) -> Option<Request<P>> {
-		let req = self.receiver.receive().await;
+		let req = self.receiver.as_mut().unwrap().receive().await;
 		if let Some(Request::EnableServerRequests) = &req {
 			self.sender_enabled = true;
 		}
@@ -92,6 +97,14 @@ impl<P> Connection<P> {
 
 	pub fn is_request_enabled(&self) -> bool {
 		self.sender_enabled
+	}
+
+	/// ## Panics
+	/// - If server requests are not enabled
+	pub fn clone_sender(&mut self) -> Sender<P> {
+		assert!(self.sender_enabled);
+
+		self.sender.clone()
 	}
 
 	/// Send a request waiting until a response is available or the connection

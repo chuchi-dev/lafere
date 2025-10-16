@@ -15,10 +15,7 @@ use tokio::{
 use crate::{
 	client::ReconStrat,
 	error::{RequestError, ResponseError, TaskError},
-	handler::{
-		SendBack, StreamReceiver, StreamSender, client::Sender,
-		server::Receiver,
-	},
+	handler::{Receiver, SendBack, Sender, StreamReceiver, StreamSender},
 	packet::{
 		Flags, Kind, Packet, PacketBytes, PacketError, PacketHeader,
 		builder::PacketReceiverError,

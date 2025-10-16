@@ -11,7 +11,9 @@ pub struct Sender<P> {
 
 impl<P> Sender<P> {
 	// can only be sent from a client
-	pub async fn enable_server_requests(&self) -> Result<(), RequestError> {
+	pub(crate) async fn enable_server_requests(
+		&self,
+	) -> Result<(), RequestError> {
 		self.inner
 			.send(InternalRequest::EnableServerRequests)
 			.await

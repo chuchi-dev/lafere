@@ -1,7 +1,6 @@
 use crate::error::{RequestError, TaskError};
-use crate::handler::server::Receiver;
 use crate::handler::{
-	Configurator, StreamReceiver, StreamSender, TaskHandle, client::Sender,
+	Configurator, Receiver, Sender, StreamReceiver, StreamSender, TaskHandle,
 };
 use crate::packet::{Packet, PlainBytes};
 use crate::plain;
@@ -48,7 +47,7 @@ impl<S> ReconStrat<S> {
 /// A connection to a server
 pub struct Connection<P> {
 	sender: Sender<P>,
-	receiver: Receiver<P>,
+	receiver: Option<Receiver<P>>,
 	receiver_enabled: bool,
 	config: Configurator<Config>,
 	task: TaskHandle,
@@ -95,7 +94,7 @@ impl<P> Connection<P> {
 	) -> Self {
 		Self {
 			sender,
-			receiver,
+			receiver: Some(receiver),
 			receiver_enabled: false,
 			config,
 			task,
@@ -122,10 +121,23 @@ impl<P> Connection<P> {
 
 	/// ## Panics
 	/// - If server requests are not enabled
+	pub fn take_receiver(&mut self) -> Option<Receiver<P>> {
+		assert!(self.receiver_enabled);
+
+		self.receiver.take()
+	}
+
+	/// ## Panics
+	/// - If server requests are not enabled
+	/// - If called when there is no receiver (e.g. after calling `take_receiver`)
 	pub async fn receive(&mut self) -> Option<Request<P>> {
 		assert!(self.receiver_enabled);
 
-		self.receiver.receive().await
+		self.receiver.as_mut().unwrap().receive().await
+	}
+
+	pub fn clone_sender(&mut self) -> Sender<P> {
+		self.sender.clone()
 	}
 
 	/// Send a request waiting until a response is available or the connection

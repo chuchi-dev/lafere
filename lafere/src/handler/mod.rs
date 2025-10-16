@@ -1,15 +1,18 @@
 //!
 //!
 
-pub(crate) mod client;
 pub(crate) mod handler;
-pub(crate) mod server;
+mod receiver;
+mod sender;
 
 use crate::error::{StreamError, TaskError};
 use crate::util::watch;
 
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
+
+pub use receiver::Receiver;
+pub use sender::Sender;
 
 /// Used in Client and Server
 pub(crate) enum SendBack<P> {
