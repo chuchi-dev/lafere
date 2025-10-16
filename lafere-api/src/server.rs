@@ -580,6 +580,7 @@ mod protobuf_tests {
 		Debug, Default, EncodeMessage, DecodeMessage, IntoMessage, FromMessage,
 	)]
 	#[message(protobuf)]
+	#[allow(dead_code)]
 	struct TestReq {
 		#[field(1)]
 		hello: u64,
@@ -589,6 +590,7 @@ mod protobuf_tests {
 		Debug, Default, EncodeMessage, DecodeMessage, IntoMessage, FromMessage,
 	)]
 	#[message(protobuf)]
+	#[allow(dead_code)]
 	struct TestReq2 {
 		#[field(1)]
 		hello: u64,
