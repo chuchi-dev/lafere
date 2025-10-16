@@ -1,9 +1,11 @@
 use crate::error::{RequestError, TaskError};
+use crate::handler::server::Receiver;
 use crate::handler::{
 	Configurator, StreamReceiver, StreamSender, TaskHandle, client::Sender,
 };
 use crate::packet::{Packet, PlainBytes};
 use crate::plain;
+use crate::server::Request;
 use crate::util::{ByteStream, PinnedFuture};
 
 #[cfg(feature = "encrypted")]
@@ -45,7 +47,10 @@ impl<S> ReconStrat<S> {
 
 /// A connection to a server
 pub struct Connection<P> {
-	sender: Sender<P, Config>,
+	sender: Sender<P>,
+	receiver: Receiver<P>,
+	receiver_enabled: bool,
+	config: Configurator<Config>,
 	task: TaskHandle,
 }
 
@@ -82,19 +87,45 @@ impl<P> Connection<P> {
 	}
 
 	/// Creates a new Stream.
-	pub(crate) fn new_raw(sender: Sender<P, Config>, task: TaskHandle) -> Self {
-		Self { sender, task }
+	pub(crate) fn new_raw(
+		sender: Sender<P>,
+		receiver: Receiver<P>,
+		config: Configurator<Config>,
+		task: TaskHandle,
+	) -> Self {
+		Self {
+			sender,
+			receiver,
+			receiver_enabled: false,
+			config,
+			task,
+		}
 	}
 
 	/// Update the connection configuration
 	pub fn update_config(&self, cfg: Config) {
-		self.sender.update_config(cfg);
+		self.config.update(cfg);
 	}
 
 	/// Get's a `Configurator` which allows to configure this connection
 	/// without needing to have access to the connection
 	pub fn configurator(&self) -> Configurator<Config> {
-		self.sender.configurator()
+		self.config.clone()
+	}
+
+	pub async fn enable_server_requests(&mut self) -> Result<(), RequestError> {
+		self.sender.enable_server_requests().await?;
+		self.receiver_enabled = true;
+
+		Ok(())
+	}
+
+	/// ## Panics
+	/// - If server requests are not enabled
+	pub async fn receive(&mut self) -> Option<Request<P>> {
+		assert!(self.receiver_enabled);
+
+		self.receiver.receive().await
 	}
 
 	/// Send a request waiting until a response is available or the connection

@@ -123,7 +123,7 @@ impl PacketHeader for MyHeader {
 async fn main() {
 	let (client, server) = io::duplex(1024);
 
-	let client = client::Connection::<MyPacket<_>>::new(
+	let mut alice = client::Connection::<MyPacket<_>>::new(
 		client,
 		client::Config {
 			timeout: Duration::from_secs(1),
@@ -132,7 +132,7 @@ async fn main() {
 		None,
 	);
 
-	let mut server = server::Connection::<MyPacket<_>>::new(
+	let mut bob = server::Connection::<MyPacket<_>>::new(
 		server,
 		server::Config {
 			timeout: Duration::from_secs(1),
@@ -141,18 +141,13 @@ async fn main() {
 	);
 
 	let client_task = tokio::spawn(async move {
-		let mut req = MyPacket::empty();
-		req.body_mut().write(b"Hello, World!");
+		alice.enable_server_requests().await.unwrap();
 
-		let resp = client.request(req).await.unwrap();
-		assert_eq!(resp.body().as_slice(), b"Hello, Back!");
-	});
-
-	let server_task = tokio::spawn(async move {
-		let msg = server.receive().await.unwrap();
+		// listen for a request from Bob
+		let msg = alice.receive().await.unwrap();
 		match msg {
 			Message::Request(req, resp_sender) => {
-				assert_eq!(req.body().as_slice(), b"Hello, World!");
+				assert_eq!(req.body().as_slice(), b"Hello, Alice!");
 
 				let mut resp = MyPacket::empty();
 				resp.body_mut().write(b"Hello, Back!");
@@ -161,13 +156,46 @@ async fn main() {
 			_ => unreachable!(),
 		}
 
-		assert!(server.receive().await.is_none());
+		// send a request to Bob
+		let mut req = MyPacket::empty();
+		req.body_mut().write(b"Hello, Bob!");
+
+		let resp = alice.request(req).await.unwrap();
+		assert_eq!(resp.body().as_slice(), b"Hello, Back!");
+
+		assert!(alice.receive().await.is_none());
+	});
+
+	let server_task = tokio::spawn(async move {
+		// wait for Alice to enable server requests
+		let msg = bob.receive().await.unwrap();
+		assert!(matches!(msg, Message::EnableServerRequests));
+
+		// send a request to Alice
+		let mut req = MyPacket::empty();
+		req.body_mut().write(b"Hello, Alice!");
+
+		let resp = bob.request(req).await.unwrap();
+		assert_eq!(resp.body().as_slice(), b"Hello, Back!");
+
+		// listen for a request from Alice
+		let msg = bob.receive().await.unwrap();
+		match msg {
+			Message::Request(req, resp_sender) => {
+				assert_eq!(req.body().as_slice(), b"Hello, Bob!");
+
+				let mut resp = MyPacket::empty();
+				resp.body_mut().write(b"Hello, Back!");
+				resp_sender.send(resp).unwrap();
+			}
+			_ => unreachable!(),
+		}
 	});
 
 	tokio::try_join!(client_task, server_task).unwrap();
 }
 
 #[test]
-fn request_response_main() {
+fn server_requests_main() {
 	main();
 }

@@ -1,17 +1,23 @@
-use super::{Configurator, StreamReceiver, StreamSender};
+use super::{StreamReceiver, StreamSender};
 use crate::error::RequestError;
 use crate::handler::handler::InternalRequest;
-use crate::util::watch;
 
 use tokio::sync::{mpsc, oneshot};
 
 /// A sender that sends messages to the handler.
-pub struct Sender<P, C> {
+pub struct Sender<P> {
 	pub(super) inner: mpsc::Sender<InternalRequest<P>>,
-	pub(super) cfg: watch::Sender<C>,
 }
 
-impl<P, C> Sender<P, C> {
+impl<P> Sender<P> {
+	// can only be sent from a client
+	pub async fn enable_server_requests(&self) -> Result<(), RequestError> {
+		self.inner
+			.send(InternalRequest::EnableServerRequests)
+			.await
+			.map_err(|_| RequestError::ConnectionAlreadyClosed)
+	}
+
 	/// Send a request waiting until a response is available.
 	pub async fn request(&self, packet: P) -> Result<P, RequestError> {
 		let (tx, rx) = oneshot::channel();
@@ -50,21 +56,12 @@ impl<P, C> Sender<P, C> {
 
 		Ok(StreamReceiver::new(rx))
 	}
-
-	pub fn update_config(&self, cfg: C) {
-		self.cfg.send(cfg);
-	}
-
-	pub fn configurator(&self) -> Configurator<C> {
-		Configurator::new(self.cfg.clone())
-	}
 }
 
-impl<P, C> Clone for Sender<P, C> {
+impl<P> Clone for Sender<P> {
 	fn clone(&self) -> Self {
 		Self {
 			inner: self.inner.clone(),
-			cfg: self.cfg.clone(),
 		}
 	}
 }

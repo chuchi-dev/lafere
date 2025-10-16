@@ -1,5 +1,7 @@
-use crate::error::TaskError;
+use crate::error::{RequestError, TaskError};
+use crate::handler::client::Sender;
 use crate::handler::{Configurator, TaskHandle, server::Receiver};
+use crate::handler::{StreamReceiver, StreamSender};
 use crate::packet::{Packet, PlainBytes};
 use crate::plain;
 use crate::util::ByteStream;
@@ -23,7 +25,10 @@ pub struct Config {
 }
 
 pub struct Connection<P> {
-	receiver: Receiver<P, Config>,
+	sender: Sender<P>,
+	sender_enabled: bool,
+	receiver: Receiver<P>,
+	config: Configurator<Config>,
 	task: TaskHandle,
 }
 
@@ -53,23 +58,82 @@ impl<P> Connection<P> {
 	}
 
 	pub fn update_config(&self, cfg: Config) {
-		self.receiver.update_config(cfg);
+		self.config.update(cfg);
 	}
 
 	pub fn configurator(&self) -> Configurator<Config> {
-		self.receiver.configurator()
+		self.config.clone()
 	}
 
 	/// Creates a new Stream.
 	pub(crate) fn new_raw(
-		receiver: Receiver<P, Config>,
+		sender: Sender<P>,
+		receiver: Receiver<P>,
+		config: Configurator<Config>,
 		task: TaskHandle,
 	) -> Self {
-		Self { receiver, task }
+		Self {
+			sender,
+			sender_enabled: false,
+			receiver,
+			config,
+			task,
+		}
 	}
 
 	pub async fn receive(&mut self) -> Option<Request<P>> {
-		self.receiver.receive().await
+		let req = self.receiver.receive().await;
+		if let Some(Request::EnableServerRequests) = &req {
+			self.sender_enabled = true;
+		}
+
+		req
+	}
+
+	pub fn is_request_enabled(&self) -> bool {
+		self.sender_enabled
+	}
+
+	/// Send a request waiting until a response is available or the connection
+	/// closes
+	///
+	/// ## Errors
+	/// - Writing the packet failed
+	/// - Reading the response packet failed
+	/// - Io Error
+	///
+	/// ## Panics
+	/// - If server requests are not enabled
+	pub async fn request(&self, packet: P) -> Result<P, RequestError> {
+		assert!(self.sender_enabled);
+
+		self.sender.request(packet).await
+	}
+
+	/// Create a new stream to send packets.
+	///
+	/// ## Panics
+	/// - If server requests are not enabled
+	pub async fn request_sender(
+		&self,
+		packet: P,
+	) -> Result<StreamSender<P>, RequestError> {
+		assert!(self.sender_enabled);
+
+		self.sender.request_sender(packet).await
+	}
+
+	/// Opens a new stream to listen to packets.
+	///
+	/// ## Panics
+	/// - If server requests are not enabled
+	pub async fn request_receiver(
+		&self,
+		packet: P,
+	) -> Result<StreamReceiver<P>, RequestError> {
+		assert!(self.sender_enabled);
+
+		self.sender.request_receiver(packet).await
 	}
 
 	pub async fn close(self) -> Result<(), TaskError> {

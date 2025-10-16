@@ -96,8 +96,9 @@ pub struct Configurator<C> {
 }
 
 impl<C> Configurator<C> {
-	pub(crate) fn new(inner: watch::Sender<C>) -> Self {
-		Self { inner }
+	pub(crate) fn new(cfg: C) -> (Self, watch::Receiver<C>) {
+		let (tx, rx) = watch::channel(cfg);
+		(Self { inner: tx }, rx)
 	}
 
 	/// It is possible that there are no receivers left.

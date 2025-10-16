@@ -108,7 +108,8 @@ kind! {
 	StreamClosed = 7,
 	Close = 8,
 	Ping = 9,
-	MalformedRequest = 10
+	MalformedRequest = 10,
+	EnableServerRequests = 11
 }
 
 // equivalent to expect response

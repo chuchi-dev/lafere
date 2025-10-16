@@ -13,6 +13,11 @@ name = "request_response"
 test = true
 required-features = ["connection"]
 
+[[example]]
+name = "server_requests"
+test = true
+required-features = ["connection"]
+
 [features]
 default = ["connection"]
 connection = ["tokio"]

@@ -1,8 +1,8 @@
 use crate::client::{Config as ClientConfig, Connection as Client, ReconStrat};
-use crate::handler::TaskHandle;
 use crate::handler::handler::{
 	Handler, PacketStream, bg_stream, bg_stream_reconnect,
 };
+use crate::handler::{Configurator, TaskHandle};
 use crate::packet::builder::{PacketReceiver, PacketReceiverError};
 use crate::packet::{Packet, PlainBytes};
 use crate::server::{Config as ServerConfig, Connection as Server};
@@ -25,7 +25,8 @@ where
 	P: Packet<PlainBytes> + Send + 'static,
 	P::Header: Send,
 {
-	let (sender, _, mut cfg_rx, mut bg_handler) = Handler::new(cfg, false);
+	let (sender, receiver, mut bg_handler) = Handler::new(false);
+	let (cfg_tx, mut cfg_rx) = Configurator::new(cfg);
 
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
@@ -51,7 +52,7 @@ where
 		task,
 	};
 
-	Client::new_raw(sender, task)
+	Client::new_raw(sender, receiver, cfg_tx, task)
 }
 
 /// Creates a new server from a stream, without using any encryption.
@@ -62,7 +63,8 @@ where
 	P::Header: Send,
 {
 	let stream = PlainPacketStream::new(stream, cfg.timeout, cfg.body_limit);
-	let (_, receiver, mut cfg_rx, mut bg_handler) = Handler::new(cfg, true);
+	let (sender, receiver, mut bg_handler) = Handler::new(true);
+	let (cfg_tx, mut cfg_rx) = Configurator::new(cfg);
 
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
@@ -90,7 +92,7 @@ where
 		task,
 	};
 
-	Server::new_raw(receiver, task)
+	Server::new_raw(sender, receiver, cfg_tx, task)
 }
 
 /// inner manages a stream

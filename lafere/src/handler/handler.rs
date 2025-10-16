@@ -29,6 +29,7 @@ use crate::{
 /// A message containing the different kinds of messages.
 #[derive(Debug)]
 pub(crate) enum InternalRequest<P> {
+	EnableServerRequests,
 	Request(P, oneshot::Sender<Result<P, RequestError>>),
 	// a request to receive a sender stream
 	RequestSender(P, mpsc::Receiver<P>),
@@ -39,6 +40,7 @@ pub(crate) enum InternalRequest<P> {
 /// All different kinds of messages.
 #[derive(Debug)]
 pub enum Request<P> {
+	EnableServerRequests,
 	Request(P, ResponseSender<P>),
 	// a request to receive a sender stream
 	RequestSender(P, StreamReceiver<P>),
@@ -197,6 +199,89 @@ enum StreamResponse<P> {
 	Receiver(mpsc::Sender<P>),
 }
 
+// this is the maximum client id inclusive
+const U32_MID: u32 = u32::MAX / 2;
+
+enum HandlerState {
+	UniServer,
+	// 0..=u32::max
+	UniClient(Option<u32>),
+	// (u32::mid + 1)..u32::max
+	BiServer(Option<u32>),
+	// 0..=u32::mid
+	BiClient(Option<u32>),
+}
+
+impl HandlerState {
+	fn next_id(&mut self) -> Option<u32> {
+		let id;
+		match self {
+			HandlerState::UniServer => panic!("cannot create id on uni Server"),
+			HandlerState::UniClient(counter) => {
+				id = *counter;
+				*counter = counter.and_then(|c| c.checked_add(1));
+			}
+			HandlerState::BiServer(counter) => {
+				id = *counter;
+				debug_assert!(
+					counter.is_none()
+						|| matches!(*counter, Some(c) if c > U32_MID)
+				);
+				*counter = counter.and_then(|c| c.checked_add(1));
+			}
+			HandlerState::BiClient(counter) => {
+				id = *counter;
+
+				match counter {
+					Some(c) if *c < U32_MID => *c += 1,
+					_ => *counter = None,
+				}
+			}
+		}
+
+		id
+	}
+
+	fn can_receive_requests(&self) -> bool {
+		!matches!(self, HandlerState::UniClient(_))
+	}
+
+	fn can_send_requests(&self) -> bool {
+		!matches!(self, HandlerState::UniServer)
+	}
+
+	fn reset(&mut self) {
+		match self {
+			HandlerState::UniServer => {}
+			HandlerState::UniClient(counter) => *counter = Some(0),
+			HandlerState::BiServer(counter) => *counter = Some(U32_MID + 1),
+			HandlerState::BiClient(counter) => *counter = Some(0),
+		}
+	}
+
+	/// Returns true if the state was changed (meaning it was previous not enabled)
+	fn enable_server_requests(&mut self) -> bool {
+		match self {
+			HandlerState::UniServer => {
+				*self = HandlerState::BiServer(Some(U32_MID + 1));
+			}
+			HandlerState::UniClient(Some(id)) => {
+				if *id <= U32_MID {
+					*self = HandlerState::BiClient(Some(*id));
+				} else {
+					*self = HandlerState::BiClient(None);
+				}
+			}
+			HandlerState::UniClient(None) => {
+				*self = HandlerState::BiClient(None);
+			}
+			_ => return false,
+		}
+
+		true
+	}
+}
+
 /// A handler that is responsible for the client.
 pub struct Handler<P, B>
 where
@@ -207,9 +292,7 @@ where
 	tx_requests: mpsc::Sender<Request<P>>,
 	waiting_on_stream: HashMap<u32, StreamResponse<P>>,
 	waiting_on_user: WaitingOnUser<P, B>,
-	is_server: bool,
-	// since we are "the client" we give every message a new id (or packet?)
-	counter: u32,
+	state: HandlerState,
 }
 
 impl<P, B> Handler<P, B>
@@ -217,45 +300,32 @@ where
 	P: Packet<B>,
 	B: PacketBytes,
 {
-	pub fn new<C>(
-		config: C,
-		is_server: bool,
-	) -> (Sender<P, C>, Receiver<P, C>, watch::Receiver<C>, Self) {
+	pub fn new(is_server: bool) -> (Sender<P>, Receiver<P>, Self) {
 		let (tx1, rx1) = mpsc::channel(10);
 		let (tx2, rx2) = mpsc::channel(10);
-		let (cfg_tx, cfg_rx) = watch::channel(config);
 
 		(
-			Sender {
-				inner: tx1,
-				cfg: cfg_tx.clone(),
-			},
-			Receiver {
-				inner: rx2,
-				cfg: cfg_tx,
-			},
-			cfg_rx,
+			Sender { inner: tx1 },
+			Receiver { inner: rx2 },
 			Self {
 				rx_requests: rx1,
 				tx_requests: tx2,
 				waiting_on_stream: HashMap::new(),
 				waiting_on_user: WaitingOnUser::new(),
-				counter: 0,
-				is_server,
+				state: if is_server {
+					HandlerState::UniServer
+				} else {
+					HandlerState::UniClient(Some(0))
+				},
 			},
 		)
 	}
 
 	/// returns a new id.
 	///
-	/// If the counter is full we sent u32::max messages None is returned
+	/// If the counter is full None is returned
 	fn next_id(&mut self) -> Option<u32> {
-		assert!(
-			!self.is_server,
-			"only allowed to generate ids on the client"
-		);
-		self.counter = self.counter.checked_add(1)?;
-		Some(self.counter)
+		self.state.next_id()
 	}
 
 	/// Creates a new ping packet
@@ -292,8 +362,28 @@ where
 		let id = packet.header().id();
 		let kind = flags.kind();
 
+		let can_recv_req = self.state.can_receive_requests();
+
 		match kind {
-			Kind::Request if self.is_server => {
+			Kind::EnableServerRequests => {
+				let newly_enabled = self.state.enable_server_requests();
+				if newly_enabled {
+					let sr = self
+						.tx_requests
+						.send(Request::EnableServerRequests)
+						.await;
+
+					match sr {
+						Ok(_) => Ok(SendBack::None),
+						// the server has no interest anymore
+						// Let's close the connection
+						Err(_) => Ok(SendBack::CloseWithPacket),
+					}
+				} else {
+					Ok(SendBack::None)
+				}
+			}
+			Kind::Request if can_recv_req => {
 				let (tx, rx) = oneshot::channel();
 
 				self.waiting_on_user.insert(id, UserRespone::Request(rx))?;
@@ -310,7 +400,7 @@ where
 					Err(_) => Ok(SendBack::CloseWithPacket),
 				}
 			}
-			Kind::RequestReceiver if self.is_server => {
+			Kind::RequestReceiver if can_recv_req => {
 				let (tx, rx) = mpsc::channel(10);
 				self.waiting_on_user.insert(id, UserRespone::Receiver(rx))?;
 
@@ -329,7 +419,7 @@ where
 					Err(_) => Ok(SendBack::CloseWithPacket),
 				}
 			}
-			Kind::RequestSender if self.is_server => {
+			Kind::RequestSender if can_recv_req => {
 				let (tx, rx) = mpsc::channel(10);
 
 				match self.waiting_on_stream.entry(id) {
@@ -419,9 +509,10 @@ where
 	/// Returns a packet to send to the otherside.
 	/// If None is returned there is nothing more to send.
 	pub async fn to_send(&mut self) -> Option<P> {
+		let can_send_req = self.state.can_send_requests();
 		tokio::select! {
 			Some(packet) = self.waiting_on_user.to_send() => Some(packet),
-			Some(req) = self.rx_requests.recv(), if !self.is_server => {
+			Some(req) = self.rx_requests.recv(), if can_send_req => {
 
 				// todo should this return an error
 				// since we will never be able to return another
@@ -429,6 +520,10 @@ where
 				let id = self.next_id()?;
 
 				let (kind, mut packet) = match req {
+					InternalRequest::EnableServerRequests => {
+						self.state.enable_server_requests();
+						(Kind::EnableServerRequests, P::empty())
+					},
 					InternalRequest::Request(packet, sender) => {
 						self.waiting_on_stream.insert(
 							id,
@@ -522,8 +617,7 @@ where
 	pub fn close_all_started(&mut self) {
 		self.waiting_on_stream.clear();
 		self.waiting_on_user.close_all();
-		// reset counter
-		self.counter = 0;
+		self.state.reset();
 	}
 }
 
