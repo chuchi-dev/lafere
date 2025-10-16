@@ -1,9 +1,7 @@
-mod timeout;
-pub(crate) mod watch;
-#[macro_use]
-pub mod bg_task;
 mod listener;
 pub mod testing;
+mod timeout;
+pub(crate) mod watch;
 
 pub use crate::standalone_util::*;
 pub use listener::{Listener, ListenerExt, SocketAddr};

@@ -41,15 +41,15 @@ pub trait PacketHeader: Clone + Sized {
 	/// Returns the length of the body
 	fn body_len(&self) -> u32;
 
-	fn flags(&self) -> &Flags;
-
-	fn set_flags(&mut self, flags: Flags);
-
 	/// Returns the internal flags.
 	///
 	/// ## Note
 	/// This is returned as a number so that outside of this crate
 	/// nobody can rely on the information contained within.
+	fn flags(&self) -> &Flags;
+
+	fn set_flags(&mut self, flags: Flags);
+
 	fn id(&self) -> u32;
 
 	// /// Sets if this message is push.

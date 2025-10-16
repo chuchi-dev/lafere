@@ -1,14 +1,16 @@
 use crate::client::{Config as ClientConfig, Connection as Client, ReconStrat};
-use crate::error::TaskError;
-use crate::handler::{SendBack, TaskHandle, client, server};
+use crate::handler::TaskHandle;
+use crate::handler::handler::{
+	Handler, PacketStream, bg_stream, bg_stream_reconnect,
+};
 use crate::packet::builder::{PacketReceiver, PacketReceiverError};
 use crate::packet::{Packet, PlainBytes};
 use crate::server::{Config as ServerConfig, Connection as Server};
-use crate::util::{ByteStream, TimeoutReader, watch};
+use crate::util::{ByteStream, TimeoutReader};
 
 use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
-use tokio::time::{Duration, MissedTickBehavior, interval};
+use tokio::time::Duration;
 
 use std::io;
 
@@ -16,27 +18,32 @@ use std::io;
 pub(crate) fn client<S, P>(
 	byte_stream: S,
 	cfg: ClientConfig,
-	mut recon_strat: Option<ReconStrat<S>>,
+	recon_strat: Option<ReconStrat<S>>,
 ) -> Client<P>
 where
 	S: ByteStream,
 	P: Packet<PlainBytes> + Send + 'static,
 	P::Header: Send,
 {
-	let (sender, mut cfg_rx, mut bg_handler) = client::Handler::new(cfg);
+	let (sender, _, mut cfg_rx, mut bg_handler) = Handler::new(cfg, false);
 
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
-		client_bg_reconnect!(client_bg_stream(
+		bg_stream_reconnect(
 			byte_stream,
-			bg_handler,
-			cfg_rx,
-			rx_close,
+			&mut bg_handler,
+			&mut cfg_rx,
+			&mut rx_close,
+			|stream: &mut PlainPacketStream<_, _>, cfg| {
+				stream.stream.set_timeout(cfg.timeout);
+				stream.builder.set_body_limit(cfg.body_limit);
+			},
 			recon_strat,
-			|stream, cfg| {
-				Ok(PacketStream::new(stream, cfg.timeout, cfg.body_limit))
-			}
-		));
+			|stream, cfg| async move {
+				Ok(PlainPacketStream::new(stream, cfg.timeout, cfg.body_limit))
+			},
+		)
+		.await
 	});
 
 	let task = TaskHandle {
@@ -54,16 +61,20 @@ where
 	P: Packet<PlainBytes> + Send + 'static,
 	P::Header: Send,
 {
-	let stream = PacketStream::new(stream, cfg.timeout, cfg.body_limit);
-	let (receiver, mut cfg_rx, mut bg_handler) = server::Handler::new(cfg);
+	let stream = PlainPacketStream::new(stream, cfg.timeout, cfg.body_limit);
+	let (_, receiver, mut cfg_rx, mut bg_handler) = Handler::new(cfg, true);
 
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
-		let r = server_bg_stream(
+		let r = bg_stream(
 			stream,
 			&mut bg_handler,
 			&mut cfg_rx,
 			&mut rx_close,
+			|stream, cfg| {
+				stream.stream.set_timeout(cfg.timeout);
+				stream.builder.set_body_limit(cfg.body_limit);
+			},
 		)
 		.await;
 
@@ -83,7 +94,7 @@ where
 }
 
 /// inner manages a stream
-struct PacketStream<S, P>
+struct PlainPacketStream<S, P>
 where
 	S: ByteStream,
 	P: Packet<PlainBytes>,
@@ -93,7 +104,7 @@ where
 	builder: PacketReceiver<P, PlainBytes>,
 }
 
-impl<S, P> PacketStream<S, P>
+impl<S, P> PlainPacketStream<S, P>
 where
 	S: ByteStream,
 	P: Packet<PlainBytes>,
@@ -104,7 +115,13 @@ where
 			builder: PacketReceiver::new(body_limit),
 		}
 	}
+}
 
+impl<S, P> PacketStream<P, PlainBytes> for PlainPacketStream<S, P>
+where
+	S: ByteStream,
+	P: Packet<PlainBytes>,
+{
 	fn timeout(&self) -> Duration {
 		self.stream.timeout()
 	}
@@ -130,18 +147,11 @@ where
 	}
 }
 
-bg_stream!(
-	client_bg_stream, client::Handler<P, PlainBytes>, PlainBytes, ClientConfig
-);
-bg_stream!(
-	server_bg_stream, server::Handler<P, PlainBytes>, PlainBytes, ServerConfig
-);
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::packet::test::TestPacket;
-	use crate::server::Message;
+	use crate::server::Request;
 	use crate::util::PinnedFuture;
 
 	use tokio::net::{TcpListener, TcpStream};
@@ -186,7 +196,7 @@ mod tests {
 			// let's receive a request message
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::Request(req, resp) => {
+				Request::Request(req, resp) => {
 					assert_eq!(req.num1, 1);
 					assert_eq!(req.num2, 2);
 
@@ -199,7 +209,7 @@ mod tests {
 
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::RequestReceiver(req, stream) => {
+				Request::RequestReceiver(req, stream) => {
 					assert_eq!(req.num1, 5);
 					assert_eq!(req.num2, 6);
 
@@ -215,7 +225,7 @@ mod tests {
 
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::RequestSender(req, mut stream) => {
+				Request::RequestSender(req, mut stream) => {
 					assert_eq!(req.num1, 11);
 					assert_eq!(req.num2, 12);
 
@@ -264,8 +274,6 @@ mod tests {
 		stream.send(req).await.unwrap();
 		drop(stream);
 
-		println!("waiting for alice to close");
-
 		alice.close().await.unwrap();
 
 		// wait until bob's task finishes
@@ -306,7 +314,7 @@ mod tests {
 					};
 
 					match req {
-						Message::Request(req, resp) => {
+						Request::Request(req, resp) => {
 							// send response
 							let res = TestPacket::new(req.num1, req.num2);
 							resp.send(res).unwrap();

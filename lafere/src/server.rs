@@ -4,7 +4,9 @@ use crate::packet::{Packet, PlainBytes};
 use crate::plain;
 use crate::util::ByteStream;
 
-pub use crate::handler::server::Message;
+pub use crate::handler::handler::Request;
+
+pub use Request as Message;
 
 #[cfg(feature = "encrypted")]
 use crate::{encrypted, packet::EncryptedBytes};
@@ -21,7 +23,7 @@ pub struct Config {
 }
 
 pub struct Connection<P> {
-	receiver: Receiver<P>,
+	receiver: Receiver<P, Config>,
 	task: TaskHandle,
 }
 
@@ -59,11 +61,14 @@ impl<P> Connection<P> {
 	}
 
 	/// Creates a new Stream.
-	pub(crate) fn new_raw(receiver: Receiver<P>, task: TaskHandle) -> Self {
+	pub(crate) fn new_raw(
+		receiver: Receiver<P, Config>,
+		task: TaskHandle,
+	) -> Self {
 		Self { receiver, task }
 	}
 
-	pub async fn receive(&mut self) -> Option<Message<P>> {
+	pub async fn receive(&mut self) -> Option<Request<P>> {
 		self.receiver.receive().await
 	}
 

@@ -1,17 +1,20 @@
 use super::handshake::{client_handshake, server_handshake};
 use crate::client::{Config as ClientConfig, Connection as Client, ReconStrat};
 use crate::error::TaskError;
-use crate::handler::{SendBack, TaskHandle, client, server};
+use crate::handler::TaskHandle;
+use crate::handler::handler::{
+	Handler, PacketStream, bg_stream, bg_stream_reconnect,
+};
 use crate::packet::builder::{PacketReceiver, PacketReceiverError};
 use crate::packet::{EncryptedBytes, Packet};
 use crate::server::{Config as ServerConfig, Connection as Server};
-use crate::util::{ByteStream, TimeoutReader, watch};
+use crate::util::{ByteStream, TimeoutReader};
 
 use std::io;
 
 use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
-use tokio::time::{Duration, MissedTickBehavior, interval};
+use tokio::time::Duration;
 
 use crypto::cipher::Key;
 use crypto::signature as sign;
@@ -19,7 +22,7 @@ use crypto::signature as sign;
 pub fn client<S, P>(
 	stream: S,
 	cfg: ClientConfig,
-	mut recon_strat: Option<ReconStrat<S>>,
+	recon_strat: Option<ReconStrat<S>>,
 	sign: sign::PublicKey,
 ) -> Client<P>
 where
@@ -27,20 +30,25 @@ where
 	P: Packet<EncryptedBytes> + Send + 'static,
 	P::Header: Send,
 {
-	let (sender, mut cfg_rx, mut bg_handler) = client::Handler::new(cfg);
+	let (sender, _, mut cfg_rx, mut bg_handler) = Handler::new(cfg, false);
 
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
-		client_bg_reconnect!(client_bg_stream(
+		bg_stream_reconnect(
 			stream,
-			bg_handler,
-			cfg_rx,
-			rx_close,
+			&mut bg_handler,
+			&mut cfg_rx,
+			&mut rx_close,
+			|stream: &mut EncryptedPacketStream<_, _>, cfg| {
+				stream.stream.set_timeout(cfg.timeout);
+				stream.builder.set_body_limit(cfg.body_limit);
+			},
 			recon_strat,
 			|stream, cfg| {
-				PacketStream::client(stream, sign.clone(), cfg).await
-			}
-		));
+				EncryptedPacketStream::client(stream, sign.clone(), cfg)
+			},
+		)
+		.await
 	});
 
 	let task = TaskHandle {
@@ -61,17 +69,22 @@ where
 	P: Packet<EncryptedBytes> + Send + 'static,
 	P::Header: Send,
 {
-	let (receiver, mut cfg_rx, mut bg_handler) = server::Handler::new(cfg);
+	let (_, receiver, mut cfg_rx, mut bg_handler) = Handler::new(cfg, true);
 
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
 		let stream =
-			PacketStream::server(stream, sign, cfg_rx.newest()).await?;
-		let r = server_bg_stream(
+			EncryptedPacketStream::server(stream, sign, cfg_rx.newest())
+				.await?;
+		let r = bg_stream(
 			stream,
 			&mut bg_handler,
 			&mut cfg_rx,
 			&mut rx_close,
+			|stream, cfg| {
+				stream.stream.set_timeout(cfg.timeout);
+				stream.builder.set_body_limit(cfg.body_limit);
+			},
 		)
 		.await;
 
@@ -91,7 +104,7 @@ where
 }
 
 /// inner manages a stream
-struct PacketStream<S, P>
+struct EncryptedPacketStream<S, P>
 where
 	S: ByteStream,
 	P: Packet<EncryptedBytes>,
@@ -103,15 +116,11 @@ where
 	builder: PacketReceiver<P, EncryptedBytes>,
 }
 
-impl<S, P> PacketStream<S, P>
+impl<S, P> EncryptedPacketStream<S, P>
 where
 	S: ByteStream,
 	P: Packet<EncryptedBytes>,
 {
-	fn timeout(&self) -> Duration {
-		self.stream.timeout()
-	}
-
 	async fn client(
 		stream: S,
 		sign: sign::PublicKey,
@@ -140,6 +149,16 @@ where
 			recv_key: handshake.recv_key,
 			builder: PacketReceiver::new(cfg.body_limit),
 		})
+	}
+}
+
+impl<S, P> PacketStream<P, EncryptedBytes> for EncryptedPacketStream<S, P>
+where
+	S: ByteStream,
+	P: Packet<EncryptedBytes>,
+{
+	fn timeout(&self) -> Duration {
+		self.stream.timeout()
 	}
 
 	async fn send(&mut self, packet: P) -> io::Result<()> {
@@ -172,24 +191,10 @@ where
 	}
 }
 
-bg_stream!(
-	client_bg_stream,
-	client::Handler<P, EncryptedBytes>,
-	EncryptedBytes,
-	ClientConfig
-);
-bg_stream!(
-	server_bg_stream,
-	server::Handler<P, EncryptedBytes>,
-	EncryptedBytes,
-	ServerConfig
-);
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::packet::test::TestPacket;
-	use crate::server::Message;
+	use crate::{packet::test::TestPacket, server::Request};
 	use crypto::signature::Keypair;
 
 	use tokio::net::{TcpListener, TcpStream};
@@ -239,7 +244,7 @@ mod tests {
 			// let's receive a request message
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::Request(req, resp) => {
+				Request::Request(req, resp) => {
 					assert_eq!(req.num1, 1);
 					assert_eq!(req.num2, 2);
 
@@ -252,7 +257,7 @@ mod tests {
 
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::RequestReceiver(req, stream) => {
+				Request::RequestReceiver(req, stream) => {
 					assert_eq!(req.num1, 5);
 					assert_eq!(req.num2, 6);
 
@@ -268,7 +273,7 @@ mod tests {
 
 			let req = bob.receive().await.unwrap();
 			match req {
-				Message::RequestSender(req, mut stream) => {
+				Request::RequestSender(req, mut stream) => {
 					assert_eq!(req.num1, 11);
 					assert_eq!(req.num2, 12);
 

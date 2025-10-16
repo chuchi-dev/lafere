@@ -45,7 +45,7 @@ impl<S> ReconStrat<S> {
 
 /// A connection to a server
 pub struct Connection<P> {
-	sender: Sender<P>,
+	sender: Sender<P, Config>,
 	task: TaskHandle,
 }
 
@@ -82,7 +82,7 @@ impl<P> Connection<P> {
 	}
 
 	/// Creates a new Stream.
-	pub(crate) fn new_raw(sender: Sender<P>, task: TaskHandle) -> Self {
+	pub(crate) fn new_raw(sender: Sender<P, Config>, task: TaskHandle) -> Self {
 		Self { sender, task }
 	}
 

@@ -2,6 +2,7 @@
 //!
 
 pub(crate) mod client;
+pub(crate) mod handler;
 pub(crate) mod server;
 
 use crate::error::{StreamError, TaskError};
