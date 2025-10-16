@@ -2,7 +2,6 @@ use super::{BodyBytes, BodyBytesMut};
 
 use bytes::{Bytes, BytesMut};
 
-
 /// A trait that allows efficient allocation if encryption is
 /// used or not.
 pub trait PacketBytes: std::fmt::Debug {
@@ -18,7 +17,7 @@ pub trait PacketBytes: std::fmt::Debug {
 	fn header_mut(&mut self) -> BytesMut<'_>;
 
 	/// Returns the full header mutably.
-	/// 
+	///
 	/// ## Note
 	/// This should only be used to fill the buffer from a reader, in any other
 	/// case you should use `header_mut`.
@@ -31,7 +30,7 @@ pub trait PacketBytes: std::fmt::Debug {
 	fn body_mut(&mut self) -> BodyBytesMut<'_>;
 
 	/// Returns the full body mutably.
-	/// 
+	///
 	/// ## Note
 	/// This should only be used to fill the buffer from a reader, in any other
 	/// case you should use `body_mut`.
@@ -41,14 +40,14 @@ pub trait PacketBytes: std::fmt::Debug {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlainBytes {
 	bytes: Vec<u8>,
-	header_len: usize
+	header_len: usize,
 }
 
 impl PacketBytes for PlainBytes {
 	fn new(header_len: usize) -> Self {
 		Self {
 			bytes: vec![0; header_len],
-			header_len
+			header_len,
 		}
 	}
 
@@ -83,7 +82,6 @@ impl PlainBytes {
 		&*self.bytes
 	}
 }
-
 
 #[cfg(test)]
 pub(super) mod tests {

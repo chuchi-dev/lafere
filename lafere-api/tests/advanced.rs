@@ -16,10 +16,10 @@ mod api {
 	use serde::{Deserialize, Serialize};
 
 	use lafere_api::{
+		Action, FromMessage, IntoMessage,
 		error::{ApiError, MessageError, RequestError},
 		message::{FromMessage, IntoMessage, Message, PacketBytes},
 		request::Request,
-		Action, FromMessage, IntoMessage,
 	};
 
 	#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Action)]

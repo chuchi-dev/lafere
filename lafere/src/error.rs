@@ -1,8 +1,7 @@
 use crate::packet::PacketError;
 
-use std::{io, fmt};
 use std::error::Error;
-
+use std::{fmt, io};
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -20,7 +19,7 @@ pub enum TaskError {
 	/// Incorrect signature
 	#[cfg(feature = "encrypted")]
 	#[cfg_attr(docsrs, doc(cfg(feature = "encrypted")))]
-	IncorrectSignature
+	IncorrectSignature,
 }
 
 impl fmt::Display for TaskError {
@@ -31,12 +30,11 @@ impl fmt::Display for TaskError {
 
 impl Error for TaskError {}
 
-
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum RequestError {
 	/// If the connection was already closed when you called request
-	/// 
+	///
 	/// Depending on ReconnectStrat you might wan't to call request again
 	ConnectionAlreadyClosed,
 	/// Only get's returned if something wen't wrong and we won't be able
@@ -48,7 +46,7 @@ pub enum RequestError {
 	/// If the request you sent could not be parsed successfully by the server
 	MalformedRequest,
 	/// The error that originated while parsing the response
-	ResponsePacket(PacketError)
+	ResponsePacket(PacketError),
 }
 
 impl fmt::Display for RequestError {
@@ -59,11 +57,10 @@ impl fmt::Display for RequestError {
 
 impl Error for RequestError {}
 
-
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ResponseError {
-	ConnectionClosed
+	ConnectionClosed,
 }
 
 impl fmt::Display for ResponseError {
@@ -74,12 +71,11 @@ impl fmt::Display for ResponseError {
 
 impl Error for ResponseError {}
 
-
 /// Returned from a StreamSender or StreamReceiver
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum StreamError {
-	StreamAlreadyClosed
+	StreamAlreadyClosed,
 }
 
 impl fmt::Display for StreamError {

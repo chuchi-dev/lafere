@@ -1,35 +1,33 @@
-use crate::plain;
-use crate::error::{TaskError, RequestError};
+use crate::error::{RequestError, TaskError};
 use crate::handler::{
-	TaskHandle, client::Sender, StreamSender, StreamReceiver, Configurator
+	Configurator, StreamReceiver, StreamSender, TaskHandle, client::Sender,
 };
 use crate::packet::{Packet, PlainBytes};
-use crate::util::{PinnedFuture, ByteStream};
+use crate::plain;
+use crate::util::{ByteStream, PinnedFuture};
 
 #[cfg(feature = "encrypted")]
 use crate::{encrypted, packet::EncryptedBytes};
 #[cfg(feature = "encrypted")]
 use crypto::signature as sign;
 
-use std::time::Duration;
 use std::io;
-
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct Config {
 	pub timeout: Duration,
 	/// if the limit is 0 there is no limit
-	pub body_limit: u32
+	pub body_limit: u32,
 }
 
 /// Reconnection strategy
-/// 
+///
 /// You should probably add a timeout before reconnecting
 pub struct ReconStrat<S> {
 	// async fn(error_count: usize) -> io::Result<S>
-	pub(crate) inner: Box<
-		dyn FnMut(usize) -> PinnedFuture<'static, io::Result<S>> + Send
-	>
+	pub(crate) inner:
+		Box<dyn FnMut(usize) -> PinnedFuture<'static, io::Result<S>> + Send>,
 }
 
 impl<S> ReconStrat<S> {
@@ -38,17 +36,17 @@ impl<S> ReconStrat<S> {
 	/// async fn new_stream(error_count: usize) -> io::Result<S>;
 	/// ```
 	pub fn new<F: 'static>(f: F) -> Self
-	where F: FnMut(usize) -> PinnedFuture<'static, io::Result<S>> + Send {
-		Self {
-			inner: Box::new(f)
-		}
+	where
+		F: FnMut(usize) -> PinnedFuture<'static, io::Result<S>> + Send,
+	{
+		Self { inner: Box::new(f) }
 	}
 }
 
 /// A connection to a server
 pub struct Connection<P> {
 	sender: Sender<P>,
-	task: TaskHandle
+	task: TaskHandle,
 }
 
 impl<P> Connection<P> {
@@ -56,12 +54,12 @@ impl<P> Connection<P> {
 	pub fn new<S>(
 		byte_stream: S,
 		cfg: Config,
-		recon_strat: Option<ReconStrat<S>>
+		recon_strat: Option<ReconStrat<S>>,
 	) -> Self
 	where
 		S: ByteStream,
 		P: Packet<PlainBytes> + Send + 'static,
-		P::Header: Send
+		P::Header: Send,
 	{
 		plain::client(byte_stream, cfg, recon_strat)
 	}
@@ -73,12 +71,12 @@ impl<P> Connection<P> {
 		byte_stream: S,
 		cfg: Config,
 		recon_strat: Option<ReconStrat<S>>,
-		sign: sign::PublicKey
+		sign: sign::PublicKey,
 	) -> Self
 	where
 		S: ByteStream,
 		P: Packet<EncryptedBytes> + Send + 'static,
-		P::Header: Send
+		P::Header: Send,
 	{
 		encrypted::client(byte_stream, cfg, recon_strat, sign)
 	}
@@ -101,7 +99,7 @@ impl<P> Connection<P> {
 
 	/// Send a request waiting until a response is available or the connection
 	/// closes
-	/// 
+	///
 	/// ## Errors
 	/// - Writing the packet failed
 	/// - Reading the response packet failed
@@ -113,7 +111,7 @@ impl<P> Connection<P> {
 	/// Create a new stream to send packets.
 	pub async fn request_sender(
 		&self,
-		packet: P
+		packet: P,
 	) -> Result<StreamSender<P>, RequestError> {
 		self.sender.request_sender(packet).await
 	}
@@ -121,7 +119,7 @@ impl<P> Connection<P> {
 	/// Opens a new stream to listen to packets.
 	pub async fn request_receiver(
 		&self,
-		packet: P
+		packet: P,
 	) -> Result<StreamReceiver<P>, RequestError> {
 		self.sender.request_receiver(packet).await
 	}

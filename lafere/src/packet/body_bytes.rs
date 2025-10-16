@@ -8,7 +8,7 @@ use std::result::Result as StdResult;
 use std::path::Path;
 
 use bytes::{
-	Offset, Cursor, Bytes, BytesRead, BytesReadRef, BytesWrite, BytesSeek
+	Bytes, BytesRead, BytesReadRef, BytesSeek, BytesWrite, Cursor, Offset,
 };
 
 #[cfg(feature = "json")]
@@ -21,13 +21,15 @@ use tokio::io::AsyncReadExt;
 
 /// Read more from a body.
 pub struct BodyBytes<'a> {
-	inner: Bytes<'a>
+	inner: Bytes<'a>,
 }
 
 impl<'a> BodyBytes<'a> {
 	/// Creates a new body bytes.
 	pub fn new(slice: &'a [u8]) -> Self {
-		Self { inner: slice.into() }
+		Self {
+			inner: slice.into(),
+		}
 	}
 
 	/// Returns the length of this body.
@@ -43,17 +45,19 @@ impl<'a> BodyBytes<'a> {
 	#[cfg(feature = "json")]
 	#[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 	pub fn deserialize<D>(&self) -> Result<D>
-	where D: DeserializeOwned {
-		serde_json::from_slice(self.inner.as_slice())
-			.map_err(|e| e.into())
+	where
+		D: DeserializeOwned,
+	{
+		serde_json::from_slice(self.inner.as_slice()).map_err(|e| e.into())
 	}
 
 	#[cfg(feature = "fs")]
 	#[cfg_attr(docsrs, doc(cfg(feature = "fs")))]
 	pub async fn to_file<P>(&mut self, path: P) -> Result<()>
-	where P: AsRef<Path> {
-		fs::write(path, self.as_slice()).await
-			.map_err(|e| e.into())
+	where
+		P: AsRef<Path>,
+	{
+		fs::write(path, self.as_slice()).await.map_err(|e| e.into())
 	}
 }
 
@@ -66,7 +70,7 @@ impl BytesRead for BodyBytes<'_> {
 
 	#[inline]
 	fn remaining(&self) -> &[u8] {
-		 self.inner.remaining()
+		self.inner.remaining()
 	}
 
 	#[inline]
@@ -94,7 +98,7 @@ impl<'a> BytesReadRef<'a> for BodyBytes<'a> {
 	#[inline]
 	fn try_read_ref(
 		&mut self,
-		len: usize
+		len: usize,
 	) -> StdResult<&'a [u8], bytes::ReadError> {
 		self.inner.try_read_ref(len)
 	}
@@ -117,16 +121,16 @@ impl BytesSeek for BodyBytes<'_> {
 
 /// Write easely more to a body.
 pub struct BodyBytesMut<'a> {
-	inner: Offset<Cursor<&'a mut Vec<u8>>>
+	inner: Offset<Cursor<&'a mut Vec<u8>>>,
 }
 
 impl<'a> BodyBytesMut<'a> {
 	/// Creates a new body bytes.
-	/// 
+	///
 	/// This should only be used if you implement your own MessageBytes.
 	pub fn new(offset: usize, buffer: &'a mut Vec<u8>) -> Self {
 		Self {
-			inner: Offset::new(Cursor::new(buffer), offset)
+			inner: Offset::new(Cursor::new(buffer), offset),
 		}
 	}
 
@@ -154,19 +158,23 @@ impl<'a> BodyBytesMut<'a> {
 
 	#[cfg(feature = "json")]
 	pub fn serialize<S: ?Sized>(&mut self, value: &S) -> Result<()>
-	where S: Serialize {
-		serde_json::to_writer(self, value)
-			.map_err(|e| e.into())
+	where
+		S: Serialize,
+	{
+		serde_json::to_writer(self, value).map_err(|e| e.into())
 	}
 
 	#[cfg(feature = "fs")]
 	pub async fn from_file<P>(&mut self, path: P) -> Result<()>
-	where P: AsRef<Path> {
-
+	where
+		P: AsRef<Path>,
+	{
 		let mut file = File::open(path).await?;
 
 		// check how big the file is then allocate
-		let buf_size = file.metadata().await
+		let buf_size = file
+			.metadata()
+			.await
 			.map(|m| m.len() as usize + 1)
 			.unwrap_or(0);
 
@@ -182,7 +190,7 @@ impl<'a> BodyBytesMut<'a> {
 	}
 
 	/// ## Safety
-	/// 
+	///
 	/// You are not allowed to remove any data.
 	#[doc(hidden)]
 	pub unsafe fn as_mut_vec(&mut self) -> &mut Vec<u8> {
@@ -205,7 +213,7 @@ impl BytesWrite for BodyBytesMut<'_> {
 
 	fn try_write(
 		&mut self,
-		slice: impl AsRef<[u8]>
+		slice: impl AsRef<[u8]>,
 	) -> StdResult<(), bytes::WriteError> {
 		self.inner.try_write(slice)
 	}
@@ -220,7 +228,6 @@ impl BytesSeek for BodyBytesMut<'_> {
 		self.inner.try_seek(pos)
 	}
 }
-
 
 impl io::Write for BodyBytesMut<'_> {
 	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {

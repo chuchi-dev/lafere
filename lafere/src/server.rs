@@ -1,8 +1,8 @@
-use crate::plain;
-use crate::error::{TaskError};
-use crate::util::ByteStream;
-use crate::handler::{TaskHandle, server::Receiver, Configurator};
+use crate::error::TaskError;
+use crate::handler::{Configurator, TaskHandle, server::Receiver};
 use crate::packet::{Packet, PlainBytes};
+use crate::plain;
+use crate::util::ByteStream;
 
 pub use crate::handler::server::Message;
 
@@ -13,17 +13,16 @@ use crypto::signature as sign;
 
 use std::time::Duration;
 
-
 #[derive(Debug, Clone)]
 pub struct Config {
 	pub timeout: Duration,
 	/// if the limit is 0 there is no limit
-	pub body_limit: u32
+	pub body_limit: u32,
 }
 
 pub struct Connection<P> {
 	receiver: Receiver<P>,
-	task: TaskHandle
+	task: TaskHandle,
 }
 
 impl<P> Connection<P> {
@@ -32,7 +31,7 @@ impl<P> Connection<P> {
 	where
 		S: ByteStream,
 		P: Packet<PlainBytes> + Send + 'static,
-		P::Header: Send
+		P::Header: Send,
 	{
 		plain::server(byte_stream, cfg)
 	}
@@ -41,12 +40,12 @@ impl<P> Connection<P> {
 	pub fn new_encrypted<S>(
 		byte_stream: S,
 		cfg: Config,
-		sign: sign::Keypair
+		sign: sign::Keypair,
 	) -> Self
 	where
 		S: ByteStream,
 		P: Packet<EncryptedBytes> + Send + 'static,
-		P::Header: Send
+		P::Header: Send,
 	{
 		encrypted::server(byte_stream, cfg, sign)
 	}

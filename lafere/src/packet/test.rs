@@ -1,32 +1,34 @@
-use super::{PlainBytes, PacketBytes, Result};
 use super::packet::*;
+use super::{PacketBytes, PlainBytes, Result};
 
 use std::marker::PhantomData;
 
 use bytes::{Bytes, BytesMut, BytesRead, BytesWrite};
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestPacket<B> {
 	header: TestPacketHeader,
 	pub num1: u32,
 	pub num2: u64,
-	marker: PhantomData<B>
+	marker: PhantomData<B>,
 }
 
 impl<B> TestPacket<B> {
 	pub fn new(num1: u32, num2: u64) -> Self {
 		Self {
 			header: TestPacketHeader::empty(),
-			num1, num2,
-			marker: PhantomData
+			num1,
+			num2,
+			marker: PhantomData,
 		}
 	}
 }
 
-
 impl<B> Packet<B> for TestPacket<B>
-where B: PacketBytes {// gets created if header and body are ready
+where
+	B: PacketBytes,
+{
+	// gets created if header and body are ready
 	type Header = TestPacketHeader;
 
 	fn header(&self) -> &Self::Header {
@@ -42,7 +44,7 @@ where B: PacketBytes {// gets created if header and body are ready
 			header: TestPacketHeader::empty(),
 			num1: 0,
 			num2: 0,
-			marker: PhantomData
+			marker: PhantomData,
 		}
 	}
 
@@ -59,7 +61,7 @@ where B: PacketBytes {// gets created if header and body are ready
 				header,
 				num1: body.read_u32(),
 				num2: body.read_u64(),
-				marker: PhantomData
+				marker: PhantomData,
 			})
 		}
 	}
@@ -75,12 +77,11 @@ where B: PacketBytes {// gets created if header and body are ready
 	}
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestPacketHeader {
 	length: u32,
 	flags: Flags,
-	id: u32
+	id: u32,
 }
 
 impl TestPacketHeader {
@@ -94,7 +95,7 @@ impl TestPacketHeader {
 		Self {
 			length: 0,
 			flags: Flags::empty(),
-			id: 0
+			id: 0,
 		}
 	}
 }
@@ -107,7 +108,7 @@ impl PacketHeader for TestPacketHeader {
 		Ok(Self {
 			length: bytes.read_u32(),
 			flags: Flags::from_u8(bytes.read_u8())?,
-			id: bytes.read_u32()
+			id: bytes.read_u32(),
 		})
 	}
 
@@ -132,7 +133,6 @@ impl PacketHeader for TestPacketHeader {
 	}
 }
 
-
 #[test]
 fn test_message() {
 	let mut msg = TestPacket::new(10, 20);
@@ -143,10 +143,8 @@ fn test_message() {
 	// header
 	let header_bytes = bytes.header();
 	let msg_header = TestPacketHeader::from_bytes(header_bytes).unwrap();
-	let n_msg = TestPacket::from_bytes_and_header(
-		bytes.clone(),
-		msg_header
-	).unwrap();
+	let n_msg =
+		TestPacket::from_bytes_and_header(bytes.clone(), msg_header).unwrap();
 
 	assert_eq!(msg, n_msg);
 	assert_eq!(bytes, n_msg.into_bytes());

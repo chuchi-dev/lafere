@@ -1,13 +1,13 @@
-mod args;
-mod api;
-mod message;
 mod action;
+mod api;
+mod args;
+mod message;
 mod util;
 
 use args::ApiArgs;
 
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, ItemFn, DeriveInput};
+use syn::{DeriveInput, ItemFn, parse_macro_input};
 
 /*
 #[api(Request)]
@@ -27,7 +27,6 @@ pub fn api(attrs: TokenStream, item: TokenStream) -> TokenStream {
 		.unwrap_or_else(|e| e.to_compile_error())
 		.into()
 }
-
 
 /*
 #[derive(IntoMessage)]

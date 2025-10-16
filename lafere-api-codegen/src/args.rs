@@ -2,10 +2,9 @@ use syn::parse::{Parse, ParseStream, Result};
 
 use syn::Type;
 
-
 #[derive(Clone)]
 pub(crate) struct ApiArgs {
-	pub ty: Type
+	pub ty: Type,
 }
 
 impl Parse for ApiArgs {

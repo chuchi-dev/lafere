@@ -1,48 +1,48 @@
-use crate::client::{Connection as Client, Config as ClientConfig, ReconStrat};
-use crate::server::{Connection as Server, Config as ServerConfig};
-use crate::util::{watch, TimeoutReader, ByteStream};
-use crate::packet::{Packet, PlainBytes};
-use crate::packet::builder::{PacketReceiver, PacketReceiverError};
+use crate::client::{Config as ClientConfig, Connection as Client, ReconStrat};
 use crate::error::TaskError;
-use crate::handler::{client, server, TaskHandle, SendBack};
+use crate::handler::{SendBack, TaskHandle, client, server};
+use crate::packet::builder::{PacketReceiver, PacketReceiverError};
+use crate::packet::{Packet, PlainBytes};
+use crate::server::{Config as ServerConfig, Connection as Server};
+use crate::util::{ByteStream, TimeoutReader, watch};
 
 use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
-use tokio::time::{interval, Duration, MissedTickBehavior};
+use tokio::time::{Duration, MissedTickBehavior, interval};
 
 use std::io;
-
 
 /// Creates a new client from a stream, without using any encryption.
 pub(crate) fn client<S, P>(
 	byte_stream: S,
 	cfg: ClientConfig,
-	mut recon_strat: Option<ReconStrat<S>>
+	mut recon_strat: Option<ReconStrat<S>>,
 ) -> Client<P>
 where
 	S: ByteStream,
 	P: Packet<PlainBytes> + Send + 'static,
-	P::Header: Send
+	P::Header: Send,
 {
 	let (sender, mut cfg_rx, mut bg_handler) = client::Handler::new(cfg);
 
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
-		client_bg_reconnect!(
-			client_bg_stream(
-				byte_stream,
-				bg_handler,
-				cfg_rx,
-				rx_close,
-				recon_strat,
-				|stream, cfg| {
-					Ok(PacketStream::new(stream, cfg.timeout, cfg.body_limit))
-				}
-			)
-		);
+		client_bg_reconnect!(client_bg_stream(
+			byte_stream,
+			bg_handler,
+			cfg_rx,
+			rx_close,
+			recon_strat,
+			|stream, cfg| {
+				Ok(PacketStream::new(stream, cfg.timeout, cfg.body_limit))
+			}
+		));
 	});
 
-	let task = TaskHandle { close: tx_close, task };
+	let task = TaskHandle {
+		close: tx_close,
+		task,
+	};
 
 	Client::new_raw(sender, task)
 }
@@ -52,7 +52,7 @@ pub(crate) fn server<S, P>(stream: S, cfg: ServerConfig) -> Server<P>
 where
 	S: ByteStream,
 	P: Packet<PlainBytes> + Send + 'static,
-	P::Header: Send
+	P::Header: Send,
 {
 	let stream = PacketStream::new(stream, cfg.timeout, cfg.body_limit);
 	let (receiver, mut cfg_rx, mut bg_handler) = server::Handler::new(cfg);
@@ -63,8 +63,9 @@ where
 			stream,
 			&mut bg_handler,
 			&mut cfg_rx,
-			&mut rx_close
-		).await;
+			&mut rx_close,
+		)
+		.await;
 
 		if let Err(e) = &r {
 			tracing::error!("server_bg_stream error {:?}", e)
@@ -73,7 +74,10 @@ where
 		r
 	});
 
-	let task = TaskHandle { close: tx_close, task };
+	let task = TaskHandle {
+		close: tx_close,
+		task,
+	};
 
 	Server::new_raw(receiver, task)
 }
@@ -82,22 +86,22 @@ where
 struct PacketStream<S, P>
 where
 	S: ByteStream,
-	P: Packet<PlainBytes>
+	P: Packet<PlainBytes>,
 {
 	stream: TimeoutReader<S>,
 	// buffer to receive a message
-	builder: PacketReceiver<P, PlainBytes>
+	builder: PacketReceiver<P, PlainBytes>,
 }
 
 impl<S, P> PacketStream<S, P>
 where
 	S: ByteStream,
-	P: Packet<PlainBytes>
+	P: Packet<PlainBytes>,
 {
 	fn new(stream: S, timeout: Duration, body_limit: u32) -> Self {
 		Self {
 			stream: TimeoutReader::new(stream, timeout),
-			builder: PacketReceiver::new(body_limit)
+			builder: PacketReceiver::new(body_limit),
 		}
 	}
 
@@ -115,7 +119,9 @@ where
 
 	/// this function is abort safe
 	async fn receive(&mut self) -> Result<P, PacketReceiverError<P::Header>> {
-		self.builder.read_header(&mut self.stream, |_| Ok(())).await?;
+		self.builder
+			.read_header(&mut self.stream, |_| Ok(()))
+			.await?;
 		self.builder.read_body(&mut self.stream, |_| Ok(())).await
 	}
 
@@ -131,17 +137,15 @@ bg_stream!(
 	server_bg_stream, server::Handler<P, PlainBytes>, PlainBytes, ServerConfig
 );
 
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::packet::test::{TestPacket};
+	use crate::packet::test::TestPacket;
 	use crate::server::Message;
 	use crate::util::PinnedFuture;
 
-	use tokio::net::{TcpStream, TcpListener};
-	use tokio::time::{sleep, Duration};
-
+	use tokio::net::{TcpListener, TcpStream};
+	use tokio::time::{Duration, sleep};
 
 	/// create two tcp stream which communicate with each other
 	async fn tcp_streams() -> (TcpStream, TcpStream) {
@@ -161,16 +165,23 @@ mod tests {
 
 		let (alice, bob) = tcp_streams().await;
 
-		let alice: Client<TestPacket<_>> = client(alice, ClientConfig {
-			timeout,
-			body_limit: 200
-		}, None);
+		let alice: Client<TestPacket<_>> = client(
+			alice,
+			ClientConfig {
+				timeout,
+				body_limit: 200,
+			},
+			None,
+		);
 
 		let bob_task = tokio::spawn(async move {
-			let mut bob: Server<TestPacket<_>> = server(bob, ServerConfig {
-				timeout,
-				body_limit: 200
-			});
+			let mut bob: Server<TestPacket<_>> = server(
+				bob,
+				ServerConfig {
+					timeout,
+					body_limit: 200,
+				},
+			);
 
 			// let's receive a request message
 			let req = bob.receive().await.unwrap();
@@ -182,8 +193,8 @@ mod tests {
 					// send response
 					let res = TestPacket::new(3, 4);
 					resp.send(res).unwrap();
-				},
-				_ => panic!("expected request")
+				}
+				_ => panic!("expected request"),
 			};
 
 			let req = bob.receive().await.unwrap();
@@ -198,8 +209,8 @@ mod tests {
 
 					let res = TestPacket::new(9, 10);
 					stream.send(res).await.unwrap();
-				},
-				_ => panic!("expected stream")
+				}
+				_ => panic!("expected stream"),
 			};
 
 			let req = bob.receive().await.unwrap();
@@ -216,8 +227,8 @@ mod tests {
 					let res = stream.receive().await.unwrap();
 					assert_eq!(res.num1, 15);
 					assert_eq!(res.num2, 16);
-				},
-				_ => panic!("expected stream")
+				}
+				_ => panic!("expected stream"),
 			};
 
 			bob.wait().await.unwrap();
@@ -282,17 +293,16 @@ mod tests {
 					accept,
 					ServerConfig {
 						timeout,
-						body_limit: 200
-					}
+						body_limit: 200,
+					},
 				);
 
 				loop {
-
 					// let's receive a request message
 					let req = bob.receive().await;
 					let req = match req {
 						Some(r) => r,
-						None => continue 'main
+						None => continue 'main,
 					};
 
 					match req {
@@ -302,23 +312,22 @@ mod tests {
 							resp.send(res).unwrap();
 
 							if req.num1 == 3 {
-								break
+								break;
 							}
-						},
-						_ => panic!("expected request")
+						}
+						_ => panic!("expected request"),
 					};
 
 					if c == 1 {
-						// we need to wait so the 
+						// we need to wait so the
 						sleep(Duration::from_millis(100)).await;
 						bob.abort();
 						continue 'main;
 					}
-
 				}
 
 				bob.wait().await.expect("bob failed");
-				break
+				break;
 			}
 		});
 
@@ -326,7 +335,7 @@ mod tests {
 			TcpStream::connect(addr).await.unwrap(),
 			ClientConfig {
 				timeout,
-				body_limit: 200
+				body_limit: 200,
 			},
 			Some(ReconStrat::new(move |err_count| {
 				let addr = addr.clone();
@@ -335,7 +344,7 @@ mod tests {
 					sleep(Duration::from_millis(10)).await;
 					TcpStream::connect(addr).await
 				})
-			}))
+			})),
 		);
 
 		// first request should succeed
@@ -348,7 +357,6 @@ mod tests {
 
 		// loop until we get a response
 		loop {
-
 			assert!(retry_counter < 10);
 
 			let req = TestPacket::new(3, 4);
@@ -358,13 +366,12 @@ mod tests {
 				Err(_) => {
 					retry_counter += 1;
 					sleep(Duration::from_millis(100)).await;
-					continue
+					continue;
 				}
 			};
 			assert_eq!(res.num1, 3);
 			assert_eq!(res.num2, 4);
-			break
-
+			break;
 		}
 
 		alice.close().await.unwrap();

@@ -1,6 +1,5 @@
-
-use std::sync::{RwLock, Arc};
-use std::sync::atomic::{Ordering, AtomicUsize};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, RwLock};
 
 use tokio::sync::Notify;
 
@@ -9,23 +8,23 @@ pub fn channel<T>(data: T) -> (Sender<T>, Receiver<T>) {
 		data: RwLock::new(data),
 		version: AtomicUsize::new(1),
 		tx_count: AtomicUsize::new(1),
-		notify: Notify::new()
+		notify: Notify::new(),
 	});
 
 	(
 		Sender {
-			inner: shared.clone()
+			inner: shared.clone(),
 		},
 		Receiver {
 			inner: shared,
-			version: 0
-		}
+			version: 0,
+		},
 	)
 }
 
 #[derive(Debug)]
 pub struct Sender<T> {
-	inner: Arc<Shared<T>>
+	inner: Arc<Shared<T>>,
 }
 
 impl<T> Clone for Sender<T> {
@@ -51,9 +50,8 @@ impl<T> Drop for Sender<T> {
 }
 
 impl<T> Sender<T> {
-
 	/// It is possible that there are no receivers left.
-	/// 
+	///
 	/// This is not checked
 	pub fn send(&self, data: T) {
 		{
@@ -65,23 +63,24 @@ impl<T> Sender<T> {
 	}
 
 	pub fn newest(&self) -> T
-	where T: Clone {
+	where
+		T: Clone,
+	{
 		self.inner.data.read().unwrap().clone()
 	}
-
 }
 
 #[derive(Debug)]
 pub struct Receiver<T> {
 	inner: Arc<Shared<T>>,
-	version: usize
+	version: usize,
 }
 
 impl<T> Clone for Receiver<T> {
 	fn clone(&self) -> Self {
 		Self {
 			inner: self.inner.clone(),
-			version: self.version
+			version: self.version,
 		}
 	}
 }
@@ -89,9 +88,10 @@ impl<T> Clone for Receiver<T> {
 impl<T> Receiver<T> {
 	/// Returns None if there isn't any sender left.
 	pub async fn recv(&mut self) -> Option<T>
-	where T: Clone {
+	where
+		T: Clone,
+	{
 		loop {
-
 			// let get the notification before we check if there exists a new
 			// version to not miss any notification that could be sent
 			// between our check.
@@ -106,17 +106,18 @@ impl<T> Receiver<T> {
 			// todo: does this need to be SeqCst?
 			let tx_count = self.inner.tx_count.load(Ordering::SeqCst);
 			if tx_count == 0 {
-				return None
+				return None;
 			}
 
 			noti.await;
-
 		}
 	}
 
 	#[allow(dead_code)]
 	pub fn newest(&self) -> T
-	where T: Clone {
+	where
+		T: Clone,
+	{
 		self.inner.data.read().unwrap().clone()
 	}
 }
@@ -127,19 +128,17 @@ pub struct Shared<T> {
 	data: RwLock<T>,
 	version: AtomicUsize,
 	tx_count: AtomicUsize,
-	notify: Notify
+	notify: Notify,
 }
-
 
 #[cfg(test)]
 mod tests {
 
 	use super::*;
-	use tokio::time::{sleep, Duration};
+	use tokio::time::{Duration, sleep};
 
 	#[tokio::test]
 	async fn test_wakeup() {
-
 		let (tx, mut rx) = channel(true);
 
 		let task = tokio::spawn(async move {
@@ -160,5 +159,4 @@ mod tests {
 
 		task.await.unwrap();
 	}
-
 }

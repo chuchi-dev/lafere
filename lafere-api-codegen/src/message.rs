@@ -1,7 +1,7 @@
 use crate::util::lafere_api_crate;
 
 use proc_macro2::{Span, TokenStream};
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use syn::{
 	Attribute, DeriveInput, Error, Generics, Ident, TypeGenerics, WhereClause,
 };

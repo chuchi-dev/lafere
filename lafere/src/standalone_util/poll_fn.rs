@@ -46,4 +46,3 @@ where
 		(unsafe { &mut self.get_unchecked_mut().f })(cx)
 	}
 }
-

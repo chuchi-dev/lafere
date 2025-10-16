@@ -5,7 +5,7 @@ pub mod json {
 	use crate::message::{Action, Message, PacketBytes};
 	use bytes::BytesRead;
 
-	use serde::{de::DeserializeOwned, Serialize};
+	use serde::{Serialize, de::DeserializeOwned};
 
 	pub fn encode<T, A, B>(value: T) -> Result<Message<A, B>, MessageError>
 	where

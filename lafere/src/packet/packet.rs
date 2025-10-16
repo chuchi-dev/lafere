@@ -2,7 +2,10 @@ use super::{PacketBytes, Result};
 use bytes::Bytes;
 
 pub trait Packet<B>: Sized
-where B: PacketBytes {// gets created if header and body are ready
+where
+	B: PacketBytes,
+{
+	// gets created if header and body are ready
 	type Header: PacketHeader;
 
 	fn header(&self) -> &Self::Header;
@@ -29,7 +32,7 @@ pub trait PacketHeader: Clone + Sized {
 	const LEN: u32;
 
 	/// bytes.len() == Self::LEN
-	/// 
+	///
 	/// ## Implementor
 	/// If an Error get's returned this means that the stream from where the
 	/// bytes are read will be terminated.
@@ -43,7 +46,7 @@ pub trait PacketHeader: Clone + Sized {
 	fn set_flags(&mut self, flags: Flags);
 
 	/// Returns the internal flags.
-	/// 
+	///
 	/// ## Note
 	/// This is returned as a number so that outside of this crate
 	/// nobody can rely on the information contained within.
@@ -53,12 +56,9 @@ pub trait PacketHeader: Clone + Sized {
 	fn set_id(&mut self, id: u32);
 }
 
-
-
 // we should have a ping && pong
 // a close
-// and a 
-
+// and a
 
 // if IS_PUSH && IS_REQ (we have an internal message)
 
@@ -98,7 +98,7 @@ macro_rules! kind {
 }
 
 // max is 2^4 = 16
-kind!{
+kind! {
 	Request = 1,
 	Response = 2,
 	NoResponse = 3,
@@ -129,7 +129,7 @@ const KIND_MASK: u8 = 0b1111 << KIND_OFFSET;
 /// ```
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Flags {
-	inner: u8
+	inner: u8,
 }
 
 impl Flags {

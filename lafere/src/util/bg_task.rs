@@ -13,18 +13,17 @@
 /// }
 /// ```
 
-
 macro_rules! bg_stream {
 	($name:ident, $handler:ty, $bytes:ty, $cfg:ty) => {
 		async fn $name<S, P>(
 			mut stream: PacketStream<S, P>,
 			handler: &mut $handler,
 			cfg_rx: &mut watch::Receiver<$cfg>,
-			mut close: &mut oneshot::Receiver<()>
+			mut close: &mut oneshot::Receiver<()>,
 		) -> Result<(), TaskError>
 		where
 			S: ByteStream,
-			P: Packet<$bytes>
+			P: Packet<$bytes>,
 		{
 			let mut should_close = false;
 			let mut close_packet = None;
@@ -33,13 +32,13 @@ macro_rules! bg_stream {
 			let diff = match timeout.as_secs() {
 				0..=1 => 0,
 				0..=10 => 1,
-				_ => 5
+				_ => 5,
 			};
 			let mut interval = interval(timeout - Duration::from_secs(diff));
 			interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
 			loop {
-				tokio::select!{
+				tokio::select! {
 					packet = stream.receive(), if !should_close => {
 						let r_packet = match packet {
 							Ok(p) => {
@@ -108,10 +107,9 @@ macro_rules! bg_stream {
 						return Ok(())
 					}
 				}
-
 			}
 		}
-	}
+	};
 }
 
 macro_rules! client_bg_reconnect {
@@ -125,8 +123,7 @@ macro_rules! client_bg_reconnect {
 			// return Result<PacketStream, TaskError>
 			|$n_stream:ident, $cfg:ident| $block:block
 		)
-	) => (
-
+	) => {
 		let mut stream = Some($stream);
 
 		loop {
@@ -171,29 +168,26 @@ macro_rules! client_bg_reconnect {
 					tracing::error!("creating packetstream failed {:?}", e);
 					// close since we can't reconnect
 					if $recon_strat.is_none() {
-						return Err(e)
+						return Err(e);
 					}
 
-					continue
+					continue;
 				}
 			};
 
-			let r = $fn(
-				stream,
-				&mut $bg_handler,
-				&mut $cfg_rx,
-				&mut $rx_close
-			).await;
+			let r = $fn(stream, &mut $bg_handler, &mut $cfg_rx, &mut $rx_close)
+				.await;
 
 			match r {
 				Ok(o) => return Ok(o),
 				Err(e) => {
 					tracing::error!(
-						"fire stream client connection failed {:?}", e
+						"fire stream client connection failed {:?}",
+						e
 					);
 					if $recon_strat.is_none() {
 						// close since we can't reconnect
-						return Err(e)
+						return Err(e);
 					}
 				}
 			}
@@ -201,5 +195,5 @@ macro_rules! client_bg_reconnect {
 			// close all started requests because the connection failed
 			$bg_handler.close_all_started();
 		}
-	)
+	};
 }

@@ -21,9 +21,8 @@ pub(crate) mod builder;
 
 pub type Result<T> = std::result::Result<T, PacketError>;
 
-use std::fmt;
 use std::borrow::Cow;
-
+use std::fmt;
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -40,7 +39,7 @@ pub enum PacketError {
 	BodyLimitReached(u32),
 	#[cfg(feature = "encrypted")]
 	#[cfg_attr(docsrs, doc(cfg(feature = "encrypted")))]
-	MacNotEqual
+	MacNotEqual,
 }
 
 impl fmt::Display for PacketError {
@@ -54,9 +53,9 @@ impl fmt::Display for PacketError {
 			Self::Io(s) => write!(f, "PacketError::Io: {}", s),
 			Self::BodyLimitReached(s) => {
 				write!(f, "PacketError::BodyLimitReached: {}", s)
-			},
+			}
 			#[cfg(feature = "encrypted")]
-			Self::MacNotEqual => write!(f, "PacketError::MacNotEqual")
+			Self::MacNotEqual => write!(f, "PacketError::MacNotEqual"),
 		}
 	}
 }

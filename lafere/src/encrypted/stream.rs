@@ -1,52 +1,52 @@
-use super::handshake::{server_handshake, client_handshake};
-use crate::util::{watch, TimeoutReader, ByteStream};
-use crate::packet::{Packet, EncryptedBytes};
-use crate::packet::builder::{PacketReceiver, PacketReceiverError};
+use super::handshake::{client_handshake, server_handshake};
+use crate::client::{Config as ClientConfig, Connection as Client, ReconStrat};
 use crate::error::TaskError;
-use crate::handler::{client, server, TaskHandle, SendBack};
-use crate::client::{Connection as Client, Config as ClientConfig, ReconStrat};
-use crate::server::{Connection as Server, Config as ServerConfig};
+use crate::handler::{SendBack, TaskHandle, client, server};
+use crate::packet::builder::{PacketReceiver, PacketReceiverError};
+use crate::packet::{EncryptedBytes, Packet};
+use crate::server::{Config as ServerConfig, Connection as Server};
+use crate::util::{ByteStream, TimeoutReader, watch};
 
 use std::io;
 
 use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
-use tokio::time::{interval, Duration, MissedTickBehavior};
+use tokio::time::{Duration, MissedTickBehavior, interval};
 
 use crypto::cipher::Key;
 use crypto::signature as sign;
-
 
 pub fn client<S, P>(
 	stream: S,
 	cfg: ClientConfig,
 	mut recon_strat: Option<ReconStrat<S>>,
-	sign: sign::PublicKey
+	sign: sign::PublicKey,
 ) -> Client<P>
 where
 	S: ByteStream,
 	P: Packet<EncryptedBytes> + Send + 'static,
-	P::Header: Send
+	P::Header: Send,
 {
 	let (sender, mut cfg_rx, mut bg_handler) = client::Handler::new(cfg);
 
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
-		client_bg_reconnect!(
-			client_bg_stream(
-				stream,
-				bg_handler,
-				cfg_rx,
-				rx_close,
-				recon_strat,
-				|stream, cfg| {
-					PacketStream::client(stream, sign.clone(), cfg).await
-				}
-			)
-		);
+		client_bg_reconnect!(client_bg_stream(
+			stream,
+			bg_handler,
+			cfg_rx,
+			rx_close,
+			recon_strat,
+			|stream, cfg| {
+				PacketStream::client(stream, sign.clone(), cfg).await
+			}
+		));
 	});
 
-	let task = TaskHandle { close: tx_close, task };
+	let task = TaskHandle {
+		close: tx_close,
+		task,
+	};
 
 	Client::new_raw(sender, task)
 }
@@ -54,24 +54,26 @@ where
 pub fn server<S, P>(
 	stream: S,
 	cfg: ServerConfig,
-	sign: sign::Keypair
+	sign: sign::Keypair,
 ) -> Server<P>
 where
 	S: ByteStream,
 	P: Packet<EncryptedBytes> + Send + 'static,
-	P::Header: Send
+	P::Header: Send,
 {
 	let (receiver, mut cfg_rx, mut bg_handler) = server::Handler::new(cfg);
 
 	let (tx_close, mut rx_close) = oneshot::channel();
 	let task = tokio::spawn(async move {
-		let stream = PacketStream::server(stream, sign, cfg_rx.newest()).await?;
+		let stream =
+			PacketStream::server(stream, sign, cfg_rx.newest()).await?;
 		let r = server_bg_stream(
 			stream,
 			&mut bg_handler,
 			&mut cfg_rx,
-			&mut rx_close
-		).await;
+			&mut rx_close,
+		)
+		.await;
 
 		if let Err(e) = &r {
 			tracing::error!("bg_stream closed with error {:?}", e);
@@ -80,7 +82,10 @@ where
 		r
 	});
 
-	let task = TaskHandle { close: tx_close, task };
+	let task = TaskHandle {
+		close: tx_close,
+		task,
+	};
 
 	Server::new_raw(receiver, task)
 }
@@ -89,21 +94,20 @@ where
 struct PacketStream<S, P>
 where
 	S: ByteStream,
-	P: Packet<EncryptedBytes>
+	P: Packet<EncryptedBytes>,
 {
 	stream: TimeoutReader<S>,
 	send_key: Key,
 	recv_key: Key,
 	// buffer to receive a message
-	builder: PacketReceiver<P, EncryptedBytes>
+	builder: PacketReceiver<P, EncryptedBytes>,
 }
 
 impl<S, P> PacketStream<S, P>
 where
 	S: ByteStream,
-	P: Packet<EncryptedBytes>
+	P: Packet<EncryptedBytes>,
 {
-
 	fn timeout(&self) -> Duration {
 		self.stream.timeout()
 	}
@@ -111,7 +115,7 @@ where
 	async fn client(
 		stream: S,
 		sign: sign::PublicKey,
-		cfg: ClientConfig
+		cfg: ClientConfig,
 	) -> Result<Self, TaskError> {
 		let mut stream = TimeoutReader::new(stream, cfg.timeout);
 		let handshake = client_handshake(&sign, &mut stream).await?;
@@ -119,14 +123,14 @@ where
 			stream,
 			send_key: handshake.send_key,
 			recv_key: handshake.recv_key,
-			builder: PacketReceiver::new(cfg.body_limit)
+			builder: PacketReceiver::new(cfg.body_limit),
 		})
 	}
 
 	async fn server(
 		stream: S,
 		sign: sign::Keypair,
-		cfg: ServerConfig
+		cfg: ServerConfig,
 	) -> Result<Self, TaskError> {
 		let mut stream = TimeoutReader::new(stream, cfg.timeout);
 		let handshake = server_handshake(&sign, &mut stream).await?;
@@ -134,7 +138,7 @@ where
 			stream,
 			send_key: handshake.send_key,
 			recv_key: handshake.recv_key,
-			builder: PacketReceiver::new(cfg.body_limit)
+			builder: PacketReceiver::new(cfg.body_limit),
 		})
 	}
 
@@ -151,14 +155,16 @@ where
 	/// this function is abort safe
 	async fn receive(&mut self) -> Result<P, PacketReceiverError<P::Header>> {
 		let recv_key = &mut self.recv_key;
-		self.builder.read_header(&mut self.stream, |bytes| {
-			bytes.decrypt_header(recv_key)
-				.map_err(|e| e.into())
-		}).await?;
-		self.builder.read_body(&mut self.stream, |bytes| {
-			bytes.decrypt_body(recv_key)
-				.map_err(|e| e.into())
-		}).await
+		self.builder
+			.read_header(&mut self.stream, |bytes| {
+				bytes.decrypt_header(recv_key).map_err(|e| e.into())
+			})
+			.await?;
+		self.builder
+			.read_body(&mut self.stream, |bytes| {
+				bytes.decrypt_body(recv_key).map_err(|e| e.into())
+			})
+			.await
 	}
 
 	async fn shutdown(&mut self) -> io::Result<()> {
@@ -182,11 +188,11 @@ bg_stream!(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::packet::test::{TestPacket};
+	use crate::packet::test::TestPacket;
 	use crate::server::Message;
 	use crypto::signature::Keypair;
 
-	use tokio::net::{TcpStream, TcpListener};
+	use tokio::net::{TcpListener, TcpStream};
 
 	async fn tcp_streams() -> (TcpStream, TcpStream) {
 		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -199,10 +205,7 @@ mod tests {
 
 		let (connect, accept) = tokio::join!(connect, accept);
 
-		(
-			connect.unwrap(),
-			accept.unwrap().0
-		)
+		(connect.unwrap(), accept.unwrap().0)
 	}
 
 	#[tokio::test]
@@ -213,17 +216,25 @@ mod tests {
 
 		let (alice, bob) = tcp_streams().await;
 
-		let alice: Client<TestPacket<_>> = client(alice, ClientConfig {
-			timeout,
-			body_limit: 200
-		}, None, public_key);
+		let alice: Client<TestPacket<_>> = client(
+			alice,
+			ClientConfig {
+				timeout,
+				body_limit: 200,
+			},
+			None,
+			public_key,
+		);
 
 		let bob_task = tokio::spawn(async move {
-
-			let mut bob: Server<TestPacket<_>> = server(bob, ServerConfig {
-			timeout,
-			body_limit: 200
-		}, key);
+			let mut bob: Server<TestPacket<_>> = server(
+				bob,
+				ServerConfig {
+					timeout,
+					body_limit: 200,
+				},
+				key,
+			);
 
 			// let's receive a request message
 			let req = bob.receive().await.unwrap();
@@ -235,8 +246,8 @@ mod tests {
 					// send response
 					let res = TestPacket::new(3, 4);
 					resp.send(res).unwrap();
-				},
-				_ => panic!("expected request")
+				}
+				_ => panic!("expected request"),
 			};
 
 			let req = bob.receive().await.unwrap();
@@ -251,8 +262,8 @@ mod tests {
 
 					let res = TestPacket::new(9, 10);
 					stream.send(res).await.unwrap();
-				},
-				_ => panic!("expected stream")
+				}
+				_ => panic!("expected stream"),
 			};
 
 			let req = bob.receive().await.unwrap();
@@ -269,12 +280,11 @@ mod tests {
 					let res = stream.receive().await.unwrap();
 					assert_eq!(res.num1, 15);
 					assert_eq!(res.num2, 16);
-				},
-				_ => panic!("expected stream")
+				}
+				_ => panic!("expected stream"),
 			};
 
 			bob.wait().await.unwrap();
-
 		});
 
 		// let's make a request

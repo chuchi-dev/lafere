@@ -1,7 +1,7 @@
+use crate::ApiArgs;
 use crate::util::{
 	lafere_api_crate, ref_type, validate_inputs, validate_signature,
 };
-use crate::ApiArgs;
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};

@@ -7,7 +7,7 @@ pub(crate) mod server;
 use crate::error::{StreamError, TaskError};
 use crate::util::watch;
 
-use tokio::sync::{oneshot, mpsc};
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 /// Used in Client and Server
@@ -15,29 +15,27 @@ pub(crate) enum SendBack<P> {
 	None,
 	Packet(P),
 	Close,
-	CloseWithPacket
+	CloseWithPacket,
 }
 
 /// A Handle to a background task, if this handle is dropped
 /// the connection will be dropped.
 pub(crate) struct TaskHandle {
 	pub close: oneshot::Sender<()>,
-	pub task: JoinHandle<Result<(), TaskError>>
+	pub task: JoinHandle<Result<(), TaskError>>,
 }
 
 impl TaskHandle {
 	/// Wait until the connection has nothing more todo which will then close
 	/// the connection.
 	pub async fn wait(self) -> Result<(), TaskError> {
-		self.task.await
-			.map_err(TaskError::Join)?
+		self.task.await.map_err(TaskError::Join)?
 	}
 
 	/// Send a close signal to the background task and wait until it closes.
 	pub async fn close(self) -> Result<(), TaskError> {
 		let _ = self.close.send(());
-		self.task.await
-			.map_err(TaskError::Join)?
+		self.task.await.map_err(TaskError::Join)?
 	}
 
 	// used for testing
@@ -50,7 +48,7 @@ impl TaskHandle {
 /// A sender of packets to an open stream.
 #[derive(Debug, Clone)]
 pub struct StreamSender<P> {
-	pub(crate) inner: mpsc::Sender<P>
+	pub(crate) inner: mpsc::Sender<P>,
 }
 
 impl<P> StreamSender<P> {
@@ -60,7 +58,9 @@ impl<P> StreamSender<P> {
 
 	/// Sends a packet to the client or the server.
 	pub async fn send(&self, packet: P) -> Result<(), StreamError> {
-		self.inner.send(packet).await
+		self.inner
+			.send(packet)
+			.await
 			.map_err(|_| StreamError::StreamAlreadyClosed)
 	}
 }
@@ -68,7 +68,7 @@ impl<P> StreamSender<P> {
 /// A stream of packets which is inside of a connection.
 #[derive(Debug)]
 pub struct StreamReceiver<P> {
-	pub(crate) inner: mpsc::Receiver<P>
+	pub(crate) inner: mpsc::Receiver<P>,
 }
 
 impl<P> StreamReceiver<P> {
@@ -91,7 +91,7 @@ impl<P> StreamReceiver<P> {
 
 #[derive(Debug, Clone)]
 pub struct Configurator<C> {
-	inner: watch::Sender<C>
+	inner: watch::Sender<C>,
 }
 
 impl<C> Configurator<C> {
@@ -100,14 +100,16 @@ impl<C> Configurator<C> {
 	}
 
 	/// It is possible that there are no receivers left.
-	/// 
+	///
 	/// This is not checked
 	pub fn update(&self, cfg: C) {
 		self.inner.send(cfg);
 	}
 
 	pub fn read(&self) -> C
-	where C: Clone {
+	where
+		C: Clone,
+	{
 		self.inner.newest()
 	}
 }

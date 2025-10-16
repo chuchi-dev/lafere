@@ -2,13 +2,12 @@ use super::{BodyBytes, BodyBytesMut, PacketBytes, PacketError};
 
 use crypto::cipher::{Key, Mac};
 
-use bytes::{Bytes, BytesMut, BytesRead, BytesWrite, BytesSeek};
-
+use bytes::{Bytes, BytesMut, BytesRead, BytesSeek, BytesWrite};
 
 const OFFSET: usize = Mac::LEN;
 
 /// Encrypted bytes
-/// 
+///
 /// Data Layout
 /// +-----------+-----------+
 /// |   Header  |   Body    |
@@ -19,7 +18,7 @@ const OFFSET: usize = Mac::LEN;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncryptedBytes {
 	bytes: Vec<u8>,
-	header_len: usize
+	header_len: usize,
 }
 
 impl PacketBytes for EncryptedBytes {
@@ -28,7 +27,7 @@ impl PacketBytes for EncryptedBytes {
 			// 1 offset for header
 			// 1 offset for body
 			bytes: vec![0; OFFSET * 2 + header_len],
-			header_len
+			header_len,
 		}
 	}
 
@@ -74,7 +73,6 @@ impl EncryptedBytes {
 	}
 
 	pub(crate) fn encrypt(&mut self, key: &mut Key) {
-
 		// encrypt header
 		let mut header: BytesMut = self.full_header_mut().into();
 		header.seek(OFFSET);
@@ -83,7 +81,7 @@ impl EncryptedBytes {
 		header.write(&mac.into_bytes());
 
 		if !self.has_body() {
-			return
+			return;
 		}
 
 		// encrypt body
@@ -92,12 +90,11 @@ impl EncryptedBytes {
 		let mac = key.encrypt(body.remaining_mut());
 		body.seek(0);
 		body.write(&mac.into_bytes());
-
 	}
 
 	pub(crate) fn decrypt_header(
 		&mut self,
-		key: &mut Key
+		key: &mut Key,
 	) -> Result<(), PacketError> {
 		let mut header: BytesMut = self.full_header_mut().into();
 		let mac = Mac::from_slice(header.read(OFFSET));
@@ -107,7 +104,7 @@ impl EncryptedBytes {
 
 	pub(crate) fn decrypt_body(
 		&mut self,
-		key: &mut Key
+		key: &mut Key,
 	) -> Result<(), PacketError> {
 		let mut body: BytesMut = self.full_body_mut().into();
 		let mac = Mac::from_slice(body.read(OFFSET));
@@ -140,7 +137,6 @@ mod tests {
 
 	#[test]
 	fn crypto() {
-
 		let header = [10u8; 30];
 		let mut bytes = EncryptedBytes::new(header.len());
 		bytes.header_mut().write(&header);
@@ -165,7 +161,10 @@ mod tests {
 		// validate body mac
 		let mut mut_body = body_buf.clone();
 		let mac_r = alice_key_2.encrypt(&mut mut_body);
-		assert_eq!(mac_r.into_bytes()[..], bytes.full_body_mut().as_mut()[..16]);
+		assert_eq!(
+			mac_r.into_bytes()[..],
+			bytes.full_body_mut().as_mut()[..16]
+		);
 		assert_eq!(mut_body, bytes.body().as_slice());
 
 		// now decrypt everything
@@ -174,13 +173,10 @@ mod tests {
 
 		assert_eq!(bytes.header().as_slice(), header);
 		assert_eq!(bytes.body().as_slice(), body_buf);
-
-
 	}
 
 	#[test]
 	fn empty_msg() {
-
 		let header = [10u8; 30];
 		let mut bytes = EncryptedBytes::new(header.len());
 
@@ -204,7 +200,5 @@ mod tests {
 		assert_eq!(bytes.body().len(), 1);
 		// assert_eq!(bytes.as_slice().len(), 16 + 30 + 16 + 1);
 		assert_eq!(bytes.body().read_u8(), 0);
-
 	}
-
 }

@@ -1,8 +1,8 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use syn::{punctuated, Error, FnArg, Result, Signature, Type, TypeReference};
+use syn::{Error, FnArg, Result, Signature, Type, TypeReference, punctuated};
 
-use proc_macro_crate::{crate_name, FoundCrate};
+use proc_macro_crate::{FoundCrate, crate_name};
 
 pub(crate) fn validate_signature(sig: &Signature) -> Result<()> {
 	if let Some(con) = &sig.constness {
@@ -45,7 +45,7 @@ pub(crate) fn validate_inputs(
 	for fn_arg in inputs {
 		let ty = match fn_arg {
 			FnArg::Receiver(r) => {
-				return Err(Error::new_spanned(r, "self not allowed"))
+				return Err(Error::new_spanned(r, "self not allowed"));
 			}
 			FnArg::Typed(t) => t.ty.clone(),
 		};

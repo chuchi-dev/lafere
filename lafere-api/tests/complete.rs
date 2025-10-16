@@ -16,9 +16,9 @@ mod api {
 	use serde::{Deserialize, Serialize};
 
 	use lafere_api::{
+		Action, FromMessage, IntoMessage,
 		error::{ApiError, MessageError, RequestError},
 		request::Request,
-		Action, FromMessage, IntoMessage,
 	};
 
 	#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Action)]

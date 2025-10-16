@@ -439,7 +439,7 @@ mod json_tests {
 	use crate::error;
 	use crate::message;
 	use crate::request::Request;
-	use codegen::{api, FromMessage, IntoMessage};
+	use codegen::{FromMessage, IntoMessage, api};
 
 	use std::fmt;
 

@@ -1,8 +1,8 @@
 use crate::error::TaskError;
 
+use bytes::{BytesRead, BytesSeek, BytesWrite, Cursor};
 use crypto::cipher::{EphemeralKeypair, Key, Nonce, PublicKey};
 use crypto::signature::{self as sign, Signature};
-use bytes::{Cursor, BytesRead, BytesWrite, BytesSeek};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -14,45 +14,46 @@ const MAX_LEN: usize = const_max(TO_SIGN_LEN, TO_SEND_LEN);
 const fn const_max(a: usize, b: usize) -> usize {
 	match a > b {
 		true => a,
-		false => b
+		false => b,
 	}
 }
-
 
 pub(crate) struct Handshake {
 	pub send_key: Key,
 	pub recv_key: Key,
 	#[allow(dead_code)]
-	pub public_key: PublicKey
+	pub public_key: PublicKey,
 }
 
 /// 1. receive pk from client
 /// 2. send pk + send_nonce + recv_nonce + (signature of pk + nonce + cpk)
-/// 
+///
 /// ## Abort safe
 /// This function is not abort safe.
 pub(crate) async fn server_handshake<S>(
 	sign_key: &sign::Keypair,
-	stream: &mut S
+	stream: &mut S,
 ) -> Result<Handshake, TaskError>
-where S: AsyncRead + AsyncWrite + Unpin {
-
+where
+	S: AsyncRead + AsyncWrite + Unpin,
+{
 	// - client pk
 	let client_pk = {
 		let mut buffer = [0u8; PublicKey::LEN];
 
 		// - receive 32 bytes (random client public key)
-		stream.read_exact(&mut buffer).await
+		stream
+			.read_exact(&mut buffer)
+			.await
 			.map_err(TaskError::Io)?;
 
 		PublicKey::from(buffer)
-	};	
+	};
 
 	let server_kp = EphemeralKeypair::new();
 	let send_nonce = Nonce::new();
 	let recv_nonce = Nonce::new();
 	debug_assert_ne!(send_nonce, recv_nonce);
-
 
 	// - write all to the buffer
 	{
@@ -72,7 +73,9 @@ where S: AsyncRead + AsyncWrite + Unpin {
 
 		// now send
 		buffer.seek(0);
-		stream.write_all(buffer.read(TO_SEND_LEN)).await
+		stream
+			.write_all(buffer.read(TO_SEND_LEN))
+			.await
 			.map_err(TaskError::Io)?;
 	}
 
@@ -86,32 +89,35 @@ where S: AsyncRead + AsyncWrite + Unpin {
 	Ok(Handshake {
 		send_key,
 		recv_key,
-		public_key: client_pk
+		public_key: client_pk,
 	})
 }
 
-
 /// 1. send pk
 /// 2. receive pk + send_nonce + recv_nonce + (signature of pk + nonce + cpk)
-/// 
+///
 /// ## Abort safe
 /// This function is not abort safe.
 pub(crate) async fn client_handshake<S>(
 	sign_pk: &sign::PublicKey,
-	stream: &mut S
+	stream: &mut S,
 ) -> Result<Handshake, TaskError>
-where S: AsyncRead + AsyncWrite + Unpin {
-
+where
+	S: AsyncRead + AsyncWrite + Unpin,
+{
 	let client_kp = EphemeralKeypair::new();
 	// send pk
-	stream.write_all(client_kp.public().as_ref()).await
+	stream
+		.write_all(client_kp.public().as_ref())
+		.await
 		.map_err(TaskError::Io)?;
-
 
 	let (server_pk, send_nonce, recv_nonce) = {
 		let mut buffer = Cursor::new([0u8; MAX_LEN]);
 
-		stream.read_exact(&mut buffer.as_mut()[..TO_SEND_LEN]).await
+		stream
+			.read_exact(&mut buffer.as_mut()[..TO_SEND_LEN])
+			.await
 			.map_err(TaskError::Io)?;
 
 		// verify signature
@@ -123,25 +129,18 @@ where S: AsyncRead + AsyncWrite + Unpin {
 
 		buffer.seek(0);
 		if !sign_pk.verify(buffer.read(TO_SIGN_LEN), &sign) {
-			return Err(TaskError::IncorrectSignature)
+			return Err(TaskError::IncorrectSignature);
 		}
 
 		// read message
 		buffer.seek(0);
-		let server_pk = PublicKey::from_slice(
-			buffer.read(PublicKey::LEN)
-		);
-		let recv_nonce = Nonce::from_slice(
-			buffer.read(Nonce::LEN)
-		);
-		let send_nonce = Nonce::from_slice(
-			buffer.read(Nonce::LEN)
-		);
+		let server_pk = PublicKey::from_slice(buffer.read(PublicKey::LEN));
+		let recv_nonce = Nonce::from_slice(buffer.read(Nonce::LEN));
+		let send_nonce = Nonce::from_slice(buffer.read(Nonce::LEN));
 		debug_assert_ne!(recv_nonce, send_nonce);
 
 		(server_pk, send_nonce, recv_nonce)
 	};
-
 
 	// - diffie_hellman
 	let shared_secret = client_kp.diffie_hellman(&server_pk);
@@ -153,6 +152,6 @@ where S: AsyncRead + AsyncWrite + Unpin {
 	Ok(Handshake {
 		send_key,
 		recv_key,
-		public_key: server_pk
+		public_key: server_pk,
 	})
 }
