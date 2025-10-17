@@ -13,4 +13,8 @@ impl<P> Receiver<P> {
 	pub async fn receive(&mut self) -> Option<Request<P>> {
 		self.inner.recv().await
 	}
+
+	pub fn is_closed(&self) -> bool {
+		self.inner.is_closed()
+	}
 }

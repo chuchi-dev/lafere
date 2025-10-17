@@ -59,6 +59,10 @@ impl<P> Sender<P> {
 
 		Ok(StreamReceiver::new(rx))
 	}
+
+	pub fn is_closed(&self) -> bool {
+		self.inner.is_closed()
+	}
 }
 
 impl<P> Clone for Sender<P> {
