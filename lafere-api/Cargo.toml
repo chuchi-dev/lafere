@@ -1,7 +1,7 @@
 [package]
 name = "lafere-api"
 description = "A more or less simple communication protocol library."
-version = "0.2.0-pre.0"
+version = "0.2.0-pre.1"
 authors = ["Sören meier <info@soerenmeier.ch>"]
 repository = "https://github.com/chuchi-dev/lafere"
 edition = "2024"
@@ -28,7 +28,7 @@ json = ["lafere/json", "serde", "serde_json"]
 protobuf = ["dep:protopuffer"]
 
 [dependencies]
-lafere = { version = "0.2.0-pre.0", path = "../lafere", default-features = false }
+lafere = { version = "0.2.0-pre.1", path = "../lafere", default-features = false }
 crypto = { package = "chuchi-crypto", version = "0.2.0-pre.1", features = [
 	"cipher",
 	"signature",
@@ -40,7 +40,7 @@ tokio = { version = "1.0", features = [
 	"time",
 	"sync",
 ], optional = true }
-codegen = { package = "lafere-api-codegen", version = "0.2.0-pre.0", path = "../lafere-api-codegen" }
+codegen = { package = "lafere-api-codegen", version = "0.2.0-pre.1", path = "../lafere-api-codegen" }
 tracing = "0.1"
 
 serde = { version = "1.0", optional = true }

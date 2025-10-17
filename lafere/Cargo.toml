@@ -1,7 +1,7 @@
 [package]
 name = "lafere"
 description = "A more or less simple communication protocol library."
-version = "0.2.0-pre.0"
+version = "0.2.0-pre.1"
 authors = ["Sören meier <info@soerenmeier.ch>"]
 repository = "https://github.com/chuchi-dev/lafere"
 edition = "2024"
