@@ -16,6 +16,10 @@ required-features = ["encrypted", "json"]
 name = "advanced"
 required-features = ["encrypted", "json"]
 
+[[test]]
+name = "server_requests"
+required-features = ["encrypted", "json"]
+
 [features]
 default = ["connection"]
 connection = ["tokio", "lafere/connection"]

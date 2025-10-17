@@ -1,13 +1,18 @@
+use std::net::SocketAddrV4;
+use std::sync::Arc;
+
 use crate::error::ApiError;
 use crate::message::{Action, FromMessage, IntoMessage, Message};
 use crate::request::Request;
+use crate::request_handlers::RequestHandlers;
+use crate::server::Session;
 
 use lafere::client::Connection;
 pub use lafere::client::{Config, ReconStrat};
-use lafere::error::TaskError;
+use lafere::error::{RequestError, TaskError};
 pub use lafere::packet::PlainBytes;
 use lafere::packet::{Packet, PacketBytes};
-use lafere::util::ByteStream;
+use lafere::util::{ByteStream, SocketAddr};
 
 #[cfg(feature = "encrypted")]
 use crypto::signature::PublicKey;
@@ -88,6 +93,35 @@ where
 				.map(Err)
 				.map_err(R::Error::from_message_error)?
 		}
+	}
+
+	/// ## Panics
+	/// if a RequestHandlers was already attached
+	pub async fn attach_request_handlers(
+		&mut self,
+		handlers: RequestHandlers<A, B>,
+	) -> Result<(), RequestError>
+	where
+		A: Send + Sync + 'static,
+		B: PacketBytes + Send + 'static,
+	{
+		if !self.inner.is_server_requests_enabled() {
+			self.inner.enable_server_requests().await?;
+		}
+
+		let session = Arc::new(Session::new(SocketAddr::V4(
+			SocketAddrV4::new([0, 0, 0, 0].into(), 0).into(),
+		)));
+		session.set(self.inner.configurator());
+
+		let sender = self.inner.clone_sender();
+		let receiver = self.inner.take_receiver().unwrap();
+
+		tokio::spawn(async move {
+			handlers.handle_connection(session, sender, receiver).await;
+		});
+
+		Ok(())
 	}
 }
 

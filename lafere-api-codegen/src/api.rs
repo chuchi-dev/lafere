@@ -158,11 +158,9 @@ pub(crate) fn expand(args: ApiArgs, item: ItemFn) -> Result<TokenStream> {
 					match r {
 						Ok(m) => Ok(m),
 						Err(e) => {
-							if data.cfg().log_errors {
-								#fire::tracing::error!(
-									"handler returned an error {:?}", e
-								);
-							}
+							#fire::tracing::error!(
+								"handler returned an error {:?}", e
+							);
 
 							<#ty_as_req::Error as #into_msg>::into_message(e)
 								.map(|mut msg| {

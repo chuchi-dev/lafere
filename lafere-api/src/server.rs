@@ -1,11 +1,13 @@
 use crate::error::{ApiError, RequestError};
 use crate::message::{Action, FromMessage, IntoMessage, Message};
-use crate::request::{Request, RequestHandler};
+use crate::request::{EnableServerRequestsHandler, Request, RequestHandler};
+pub use crate::request_handlers::Data;
+use crate::request_handlers::{RequestHandlers, RequestHandlersBuilder};
 
 pub use lafere::packet::PlainBytes;
 use lafere::packet::{Packet, PacketBytes};
 pub use lafere::server::Config;
-use lafere::server::{self, Connection};
+use lafere::server::Connection;
 use lafere::util::{Listener, ListenerExt, SocketAddr};
 
 #[cfg(feature = "encrypted")]
@@ -25,92 +27,9 @@ pub struct ServerConfig {
 	pub log_errors: bool,
 }
 
-pub struct Data {
-	cfg: ServerConfig,
-	inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
-}
-
-impl Data {
-	fn new() -> Self {
-		Self {
-			cfg: ServerConfig::default(),
-			inner: HashMap::new(),
-		}
-	}
-
-	pub fn cfg(&self) -> &ServerConfig {
-		&self.cfg
-	}
-
-	pub fn exists<D>(&self) -> bool
-	where
-		D: Any,
-	{
-		TypeId::of::<D>() == TypeId::of::<Session>()
-			|| self.inner.contains_key(&TypeId::of::<D>())
-	}
-
-	fn insert<D>(&mut self, data: D)
-	where
-		D: Any + Send + Sync,
-	{
-		self.inner.insert(data.type_id(), Box::new(data));
-	}
-
-	pub fn get<D>(&self) -> Option<&D>
-	where
-		D: Any,
-	{
-		self.inner
-			.get(&TypeId::of::<D>())
-			.and_then(|a| a.downcast_ref())
-	}
-
-	pub fn get_or_sess<'a, D>(&'a self, sess: &'a Session) -> Option<&'a D>
-	where
-		D: Any,
-	{
-		if TypeId::of::<D>() == TypeId::of::<Session>() {
-			<dyn Any>::downcast_ref(sess)
-		} else {
-			self.get()
-		}
-	}
-}
-
-struct Requests<A, B> {
-	inner: HashMap<A, Box<dyn RequestHandler<B, Action = A> + Send + Sync>>,
-}
-
-impl<A, B> Requests<A, B>
-where
-	A: Action,
-{
-	fn new() -> Self {
-		Self {
-			inner: HashMap::new(),
-		}
-	}
-
-	fn insert<H>(&mut self, handler: H)
-	where
-		H: RequestHandler<B, Action = A> + Send + Sync + 'static,
-	{
-		self.inner.insert(H::action(), Box::new(handler));
-	}
-
-	fn get(
-		&self,
-		action: &A,
-	) -> Option<&Box<dyn RequestHandler<B, Action = A> + Send + Sync>> {
-		self.inner.get(action)
-	}
-}
-
 pub struct Server<A, B, L, More> {
 	inner: L,
-	requests: Requests<A, B>,
-	data: Data,
+	requests: RequestHandlersBuilder<A, B>,
 	cfg: Config,
 	more: More,
 }
@@ -123,15 +42,21 @@ where
 	where
 		H: RequestHandler<B, Action = A> + Send + Sync + 'static,
 	{
-		handler.validate_data(&self.data);
-		self.requests.insert(handler);
+		self.requests.register_request(handler);
+	}
+
+	pub fn register_enable_server_requests<H>(&mut self, handler: H)
+	where
+		H: EnableServerRequestsHandler<B, Action = A> + Send + Sync + 'static,
+	{
+		self.requests.register_enable_server_requests(handler);
 	}
 
 	pub fn register_data<D>(&mut self, data: D)
 	where
 		D: Any + Send + Sync,
 	{
-		self.data.insert(data);
+		self.requests.register_data(data);
 	}
 }
 
@@ -140,22 +65,11 @@ where
 	A: Action,
 	L: Listener,
 {
-	/// If this is set to true
-	/// errors which are returned in `#[api(*)]` functions are logged to tracing
-	pub fn set_log_errors(&mut self, log: bool) {
-		self.data.cfg.log_errors = log;
-	}
-
 	/// optionally or just use run
 	pub fn build(self) -> BuiltServer<A, B, L, More> {
-		let shared = Arc::new(Shared {
-			requests: self.requests,
-			data: self.data,
-		});
-
 		BuiltServer {
 			inner: self.inner,
-			shared,
+			requests: self.requests.build(),
 			more: self.more,
 		}
 	}
@@ -169,8 +83,7 @@ where
 	pub fn new(listener: L, cfg: Config) -> Self {
 		Self {
 			inner: listener,
-			requests: Requests::new(),
-			data: Data::new(),
+			requests: RequestHandlersBuilder::new(),
 			cfg,
 			more: (),
 		}
@@ -198,8 +111,7 @@ where
 	pub fn new_encrypted(listener: L, cfg: Config, key: Keypair) -> Self {
 		Self {
 			inner: listener,
-			requests: Requests::new(),
-			data: Data::new(),
+			requests: RequestHandlersBuilder::new(),
 			cfg,
 			more: key,
 		}
@@ -221,14 +133,9 @@ where
 
 // impl
 
-struct Shared<A, B> {
-	requests: Requests<A, B>,
-	data: Data,
-}
-
 pub struct BuiltServer<A, B, L, More> {
 	inner: L,
-	shared: Arc<Shared<A, B>>,
+	requests: RequestHandlers<A, B>,
 	more: More,
 }
 
@@ -241,7 +148,7 @@ where
 	where
 		D: Any,
 	{
-		self.shared.data.get()
+		self.requests.get_data::<D>()
 	}
 
 	pub async fn request<R>(
@@ -262,7 +169,7 @@ where
 		// handle the request
 		let action = *msg.action().unwrap();
 
-		let handler = match self.shared.requests.get(&action) {
+		let handler = match self.requests.get_handler(&action) {
 			Some(handler) => handler,
 			// todo once we bump the version again
 			// we need to pass our own errors via packets
@@ -275,7 +182,7 @@ where
 			}
 		};
 
-		let r = handler.handle(msg, &self.shared.data, session).await;
+		let r = handler.handle(msg, self.requests.data(), session).await;
 
 		let res = match r {
 			Ok(mut msg) => {
@@ -318,62 +225,15 @@ where
 			let session = Arc::new(Session::new(addr));
 			session.set(con.configurator());
 
-			let share = self.shared.clone();
+			let requests = self.requests.clone();
 			tokio::spawn(async move {
-				while let Some(req) = con.receive().await {
-					// todo replace with let else
-					let (msg, resp) = match req {
-						server::Message::Request(msg, resp) => (msg, resp),
-						// ignore streams for now
-						_ => continue,
-					};
-
-					let share = share.clone();
-					let session = session.clone();
-
-					let action = match msg.action() {
-						Some(act) => *act,
-						// todo once we bump the version again
-						// we need to pass our own errors via packets
-						// not only those from the api users
-						None => {
-							tracing::error!("invalid action received");
-							continue;
-						}
-					};
-
-					tokio::spawn(async move {
-						let handler = match share.requests.get(&action) {
-							Some(handler) => handler,
-							// todo once we bump the version again
-							// we need to pass our own errors via packets
-							// not only those from the api users
-							None => {
-								tracing::error!("no handler for {:?}", action);
-								return;
-							}
-						};
-						let r =
-							handler.handle(msg, &share.data, &session).await;
-
-						match r {
-							Ok(mut msg) => {
-								msg.header_mut().set_action(action);
-								// i don't care about the response
-								let _ = resp.send(msg);
-							}
-							Err(e) => {
-								// todo once we bump the version again
-								// we need to pass our own errors via packets
-								// not only those from the api users
-								tracing::error!(
-									"handler returned an error {:?}",
-									e
-								);
-							}
-						}
-					});
-				}
+				requests
+					.handle_connection(
+						session,
+						con.clone_sender_unchecked(),
+						con.take_receiver().unwrap(),
+					)
+					.await;
 			});
 		}
 	}

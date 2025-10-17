@@ -10,6 +10,9 @@ pub mod encdec;
 pub mod error;
 pub mod message;
 pub mod request;
+pub mod request_handlers;
+#[cfg(feature = "connection")]
+pub mod requestor;
 #[cfg(feature = "connection")]
 pub mod server;
 #[cfg(feature = "connection")]

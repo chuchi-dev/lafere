@@ -4,6 +4,7 @@ use crate::message::Action;
 use crate::{
 	error::Error,
 	message::Message,
+	requestor::Requestor,
 	server::{Data, Session},
 };
 
@@ -40,4 +41,23 @@ pub trait RequestHandler<B> {
 		data: &'a Data,
 		session: &'a Session,
 	) -> PinnedFuture<'a, Result<Message<Self::Action, B>, Error>>;
+}
+
+#[cfg(feature = "connection")]
+pub trait EnableServerRequestsHandler<B> {
+	type Action: Action;
+
+	/// if the data is not available just panic
+	fn validate_data(&self, data: &Data);
+
+	/// handles a message with Self::ACTION as action.
+	///
+	/// if None is returned the request is abandoned and
+	/// the requestor receives a RequestDropped error
+	fn handle<'a>(
+		&'a self,
+		sender: Requestor<Self::Action, B>,
+		data: &'a Data,
+		session: &'a Session,
+	) -> PinnedFuture<'a, Result<(), Error>>;
 }
