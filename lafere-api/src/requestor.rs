@@ -9,6 +9,7 @@ use crate::{
 	request::Request,
 };
 
+#[derive(Debug)]
 pub struct Requestor<A, B> {
 	inner: Sender<Message<A, B>>,
 }
@@ -48,6 +49,14 @@ where
 			R::Error::from_message(res)
 				.map(Err)
 				.map_err(R::Error::from_message_error)?
+		}
+	}
+}
+
+impl<A, B> Clone for Requestor<A, B> {
+	fn clone(&self) -> Self {
+		Self {
+			inner: self.inner.clone(),
 		}
 	}
 }
