@@ -45,6 +45,7 @@ impl<S> ReconStrat<S> {
 }
 
 /// A connection to a server
+#[derive(Debug)]
 pub struct Connection<P> {
 	sender: Sender<P>,
 	receiver: Option<Receiver<P>>,

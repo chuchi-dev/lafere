@@ -23,6 +23,7 @@ pub struct Config {
 	pub body_limit: u32,
 }
 
+#[derive(Debug)]
 pub struct Connection<P> {
 	sender: Sender<P>,
 	sender_enabled: bool,

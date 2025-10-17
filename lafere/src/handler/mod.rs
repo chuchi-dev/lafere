@@ -24,6 +24,7 @@ pub(crate) enum SendBack<P> {
 
 /// A Handle to a background task, if this handle is dropped
 /// the connection will be dropped.
+#[derive(Debug)]
 pub(crate) struct TaskHandle {
 	pub close: oneshot::Sender<()>,
 	pub task: JoinHandle<Result<(), TaskError>>,

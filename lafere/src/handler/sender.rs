@@ -5,6 +5,7 @@ use crate::handler::handler::InternalRequest;
 use tokio::sync::{mpsc, oneshot};
 
 /// A sender that sends messages to the handler.
+#[derive(Debug)]
 pub struct Sender<P> {
 	pub(super) inner: mpsc::Sender<InternalRequest<P>>,
 }

@@ -359,6 +359,11 @@ where
 		let id = packet.header().id();
 		let kind = flags.kind();
 
+		// todo we need to validate ids here if it is a bidirectional
+		// connection
+		// the issue is if the client enables server requests (do we check
+		// all our existing ids?)
+
 		let can_recv_req = self.state.can_receive_requests();
 
 		match kind {
@@ -382,7 +387,6 @@ where
 			}
 			Kind::Request if can_recv_req => {
 				let (tx, rx) = oneshot::channel();
-
 				self.waiting_on_user.insert(id, UserRespone::Request(rx))?;
 
 				let sr = self
@@ -522,10 +526,11 @@ where
 						(Kind::EnableServerRequests, P::empty())
 					},
 					InternalRequest::Request(packet, sender) => {
-						self.waiting_on_stream.insert(
+						let existing = self.waiting_on_stream.insert(
 							id,
 							StreamResponse::Request(sender)
 						);
+						assert!(existing.is_none(), "generated a duplicate id");
 
 						(Kind::Request, packet)
 					},
@@ -536,10 +541,11 @@ where
 						(Kind::RequestSender, packet)
 					},
 					InternalRequest::RequestReceiver(packet, sender) => {
-						self.waiting_on_stream.insert(
+						let existing = self.waiting_on_stream.insert(
 							id,
 							StreamResponse::Receiver(sender)
 						);
+						assert!(existing.is_none(), "generated a duplicate id");
 
 						(Kind::RequestReceiver, packet)
 					}
@@ -765,9 +771,7 @@ where
 						Ok(s) => break s,
 						Err(e) => {
 							tracing::error!(
-								"reconnect failed attempt {} {:?}",
-								err_counter,
-								e
+								"reconnect failed attempt {err_counter} {e:?}",
 							);
 							err_counter += 1;
 						}
@@ -781,7 +785,7 @@ where
 		let stream = match stream {
 			Ok(s) => s,
 			Err(e) => {
-				tracing::error!("creating packetstream failed {:?}", e);
+				tracing::error!("creating packetstream failed {e:?}");
 				// close since we can't reconnect
 				if recon_strat.is_none() {
 					return Err(e);
@@ -796,14 +800,24 @@ where
 		})
 		.await;
 
+		if let Err(e) = &r {
+			tracing::error!("lafere client stream ended with error {e:?}");
+		}
+
+		if recon_strat.is_none() {
+			// close since we can't reconnect
+			return r;
+		}
+
+		// now if the stream was ended because of us let's stop reconnecting
+		if close.is_terminated() {
+			return Ok(());
+		}
+
 		match r {
 			Ok(o) => return Ok(o),
 			Err(e) => {
-				tracing::error!("fire stream client connection failed {:?}", e);
-				if recon_strat.is_none() {
-					// close since we can't reconnect
-					return Err(e);
-				}
+				tracing::error!("lafere client stream connection failed {e:?}");
 			}
 		}
 

@@ -3,6 +3,7 @@ use crate::handler::handler::Request;
 use tokio::sync::mpsc;
 
 /// A receiver that waits on messages from the handler (client)
+#[derive(Debug)]
 pub struct Receiver<P> {
 	pub(super) inner: mpsc::Receiver<Request<P>>,
 }
