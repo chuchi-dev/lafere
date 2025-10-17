@@ -18,6 +18,10 @@ impl<A, B> Requestor<A, B> {
 	pub(crate) fn new(inner: Sender<Message<A, B>>) -> Self {
 		Self { inner }
 	}
+
+	pub fn is_closed(&self) -> bool {
+		self.inner.is_closed()
+	}
 }
 
 impl<A, B> Requestor<A, B>

@@ -3,6 +3,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use std::{net::SocketAddr, sync::atomic::AtomicBool};
 
+use codegen::enable_server_requests;
+use lafere::packet::EncryptedBytes;
 use lafere_api::{
 	client::{Client, Config as ClientConfig},
 	request_handlers::RequestHandlers,
@@ -204,7 +206,7 @@ struct OkFlag(Arc<AtomicBool>);
 #[derive(Clone)]
 struct MyAddr(SocketAddr);
 
-#[lafere_api::enable_server_requests(api::Action)]
+#[enable_server_requests(api::Action)]
 async fn enable_server_requests(
 	sender: Requestor<api::Action, B>,
 	addr: &MyAddr,
@@ -228,6 +230,13 @@ async fn enable_server_requests(
 	ok_flag.0.store(true, Ordering::SeqCst);
 
 	Ok(())
+}
+
+#[enable_server_requests(api::Action, EncryptedBytes)]
+async fn esr_with_bytes(
+	_sender: Requestor<api::Action, EncryptedBytes>,
+) -> Result<(), lafere_api::error::Error> {
+	todo!()
 }
 
 #[tokio::test]
