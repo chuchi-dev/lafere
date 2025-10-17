@@ -136,7 +136,7 @@ impl<P> Connection<P> {
 		self.receiver.as_mut().unwrap().receive().await
 	}
 
-	pub fn clone_sender(&mut self) -> Sender<P> {
+	pub fn clone_sender(&self) -> Sender<P> {
 		self.sender.clone()
 	}
 

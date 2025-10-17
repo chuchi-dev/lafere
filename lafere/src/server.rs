@@ -101,9 +101,17 @@ impl<P> Connection<P> {
 
 	/// ## Panics
 	/// - If server requests are not enabled
-	pub fn clone_sender(&mut self) -> Sender<P> {
+	pub fn clone_sender(&self) -> Sender<P> {
 		assert!(self.sender_enabled);
 
+		self.sender.clone()
+	}
+
+	/// The sender will not work as expected if the request is
+	/// not enabled
+	///
+	/// So wait on a Request::EnableServerRequests before using it
+	pub fn clone_sender_unchecked(&self) -> Sender<P> {
 		self.sender.clone()
 	}
 
