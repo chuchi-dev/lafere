@@ -3,13 +3,11 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use std::{net::SocketAddr, sync::atomic::AtomicBool};
 
-use lafere::{packet::PacketBytes, util::PinnedFuture};
 use lafere_api::{
 	client::{Client, Config as ClientConfig},
-	request::EnableServerRequestsHandler,
 	request_handlers::RequestHandlers,
 	requestor::Requestor,
-	server::{Config as ServerConfig, Data, Server, Session},
+	server::{Config as ServerConfig, Server},
 };
 
 use tokio::{
@@ -206,45 +204,30 @@ struct OkFlag(Arc<AtomicBool>);
 #[derive(Clone)]
 struct MyAddr(SocketAddr);
 
-struct EnableServerRequests;
+#[lafere_api::enable_server_requests(api::Action)]
+async fn enable_server_requests(
+	sender: Requestor<api::Action, B>,
+	addr: &MyAddr,
+	ok_flag: &OkFlag,
+) -> Result<(), lafere_api::error::Error> {
+	let r = sender.request(api::Act1Req).await.unwrap();
+	assert_eq!(r.hello, "Hello, World!");
 
-impl<B> EnableServerRequestsHandler<B> for EnableServerRequests
-where
-	B: PacketBytes + Send + 'static,
-{
-	type Action = api::Action;
+	let r = sender
+		.request(api::Act2Req { hi: "12345".into() })
+		.await
+		.unwrap();
+	assert_eq!(r.numbers, 5);
 
-	fn validate_data(&self, _data: &Data) {}
+	let r = sender.request(api::MyAddressReq).await.unwrap();
+	assert_eq!(r.addr, addr.0.to_string());
 
-	fn handle<'a>(
-		&'a self,
-		sender: Requestor<Self::Action, B>,
-		data: &'a Data,
-		_session: &'a Session,
-	) -> PinnedFuture<'a, Result<(), lafere_api::error::Error>> {
-		PinnedFuture::new(async move {
-			let r = sender.request(api::Act1Req).await.unwrap();
-			assert_eq!(r.hello, "Hello, World!");
+	let e = sender.request(api::AlwaysErrorReq).await.unwrap_err();
+	assert_eq!(e, api::Error::MyError);
 
-			let r = sender
-				.request(api::Act2Req { hi: "12345".into() })
-				.await
-				.unwrap();
-			assert_eq!(r.numbers, 5);
+	ok_flag.0.store(true, Ordering::SeqCst);
 
-			let r = sender.request(api::MyAddressReq).await.unwrap();
-			let addr = data.get::<MyAddr>().unwrap();
-			assert_eq!(r.addr, addr.0.to_string());
-
-			let e = sender.request(api::AlwaysErrorReq).await.unwrap_err();
-			assert_eq!(e, api::Error::MyError);
-
-			let ok_flag = data.get::<OkFlag>().unwrap();
-			ok_flag.0.store(true, Ordering::SeqCst);
-
-			Ok(())
-		})
-	}
+	Ok(())
 }
 
 #[tokio::test]
@@ -272,7 +255,7 @@ async fn main() {
 
 		server.register_data(my_addr_clone);
 		server.register_data(ok_flag_clone);
-		server.register_enable_server_requests(EnableServerRequests);
+		server.register_enable_server_requests(enable_server_requests);
 
 		server.run().await.unwrap();
 	});

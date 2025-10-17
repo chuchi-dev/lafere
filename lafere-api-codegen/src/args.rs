@@ -14,3 +14,16 @@ impl Parse for ApiArgs {
 		Ok(Self { ty })
 	}
 }
+
+#[derive(Clone)]
+pub(crate) struct EnableServerRequestsArgs {
+	pub ty: Type,
+}
+
+impl Parse for EnableServerRequestsArgs {
+	fn parse(input: ParseStream) -> Result<Self> {
+		let ty: Type = input.parse()?;
+
+		Ok(Self { ty })
+	}
+}
