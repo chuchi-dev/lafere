@@ -29,7 +29,7 @@ protobuf = ["dep:protopuffer"]
 
 [dependencies]
 lafere = { version = "0.2.0-pre.0", path = "../lafere", default-features = false }
-crypto = { package = "chuchi-crypto", version = "0.2.0-pre.0", features = [
+crypto = { package = "chuchi-crypto", version = "0.2.0-pre.1", features = [
 	"cipher",
 	"signature",
 ], optional = true }
