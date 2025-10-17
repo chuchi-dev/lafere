@@ -119,6 +119,10 @@ impl<P> Connection<P> {
 		Ok(())
 	}
 
+	pub fn is_server_requests_enabled(&self) -> bool {
+		self.receiver_enabled
+	}
+
 	/// ## Panics
 	/// - If server requests are not enabled
 	pub fn take_receiver(&mut self) -> Option<Receiver<P>> {

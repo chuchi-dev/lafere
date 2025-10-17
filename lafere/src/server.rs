@@ -95,7 +95,7 @@ impl<P> Connection<P> {
 		req
 	}
 
-	pub fn is_request_enabled(&self) -> bool {
+	pub fn is_server_requests_enabled(&self) -> bool {
 		self.sender_enabled
 	}
 
