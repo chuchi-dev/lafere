@@ -36,6 +36,13 @@ async fn enable_server_requests(
 ) -> Result<(), lafere_api::error::Error> {
 	todo!()
 }
+
+#[enable_server_requests(Action, EncryptedBytes)]
+async fn esr_with_bytes(
+	_sender: Requestor<Action, EncryptedBytes>,
+) -> Result<(), lafere_api::error::Error> {
+	todo!()
+}
 */
 #[proc_macro_attribute]
 pub fn enable_server_requests(

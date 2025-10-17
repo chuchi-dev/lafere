@@ -13,6 +13,11 @@ pub(crate) fn expand(
 ) -> Result<TokenStream> {
 	let fire = lafere_api_crate()?;
 	let action_ty = args.ty;
+	let use_generics = !args.bytes.is_some();
+	let bytes_ty = match args.bytes {
+		Some(b) => quote!(#b),
+		None => quote!(B),
+	};
 
 	validate_signature(&item.sig)?;
 
@@ -23,7 +28,8 @@ pub(crate) fn expand(
 	let struct_gen = generate_struct(&item);
 
 	//
-	let requestor_ty = quote!(#fire::requestor::Requestor<#action_ty, B>);
+	let requestor_ty =
+		quote!(#fire::requestor::Requestor<#action_ty, #bytes_ty>);
 
 	let type_action = quote!(
 		type Action = #action_ty;
@@ -61,6 +67,12 @@ pub(crate) fn expand(
 		)
 	};
 
+	let generics_def = if use_generics {
+		quote!(B: #fire::message::PacketBytes + Send + 'static)
+	} else {
+		quote!()
+	};
+
 	let handler_fn = {
 		let asyncness = &item.sig.asyncness;
 		let inputs = &item.sig.inputs;
@@ -68,7 +80,7 @@ pub(crate) fn expand(
 		let block = &item.block;
 
 		quote!(
-			#asyncness fn handler<B: #fire::message::PacketBytes + Send + 'static>(
+			#asyncness fn handler<#generics_def>(
 				#inputs
 			) #output
 				#block
@@ -105,6 +117,8 @@ pub(crate) fn expand(
 			handler_args.push(quote!(#var_name));
 		}
 
+		let maybe_gen = if use_generics { quote!(B) } else { quote!() };
+
 		quote!(
 			fn handle<'a>(
 				&'a self,
@@ -121,7 +135,7 @@ pub(crate) fn expand(
 
 					#(#handler_args_vars)*
 
-					handler::<B>(
+					handler::<#maybe_gen>(
 						#(#handler_args),*
 					)#await_kw
 						.map_err(Into::into)
@@ -133,8 +147,7 @@ pub(crate) fn expand(
 	Ok(quote!(
 		#struct_gen
 
-		impl<B> #fire::request::EnableServerRequestsHandler<B> for #struct_name
-		where B: #fire::message::PacketBytes + Send + 'static {
+		impl<#generics_def> #fire::request::EnableServerRequestsHandler<#bytes_ty> for #struct_name {
 			#type_action
 			#valid_data_fn
 			#handle_fn
