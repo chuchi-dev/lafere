@@ -22,6 +22,10 @@ impl<A, B> Requestor<A, B> {
 	pub fn is_closed(&self) -> bool {
 		self.inner.is_closed()
 	}
+
+	pub async fn closed(&self) {
+		self.inner.closed().await
+	}
 }
 
 impl<A, B> Requestor<A, B>

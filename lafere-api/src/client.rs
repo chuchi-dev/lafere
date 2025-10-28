@@ -126,6 +126,10 @@ where
 }
 
 impl<A, B> Client<A, B> {
+	pub async fn closed(&mut self) {
+		self.inner.closed().await
+	}
+
 	pub async fn close(self) -> Result<(), TaskError> {
 		self.inner.close().await
 	}
