@@ -94,9 +94,17 @@ impl<P> StreamReceiver<P> {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Configurator<C> {
 	inner: watch::Sender<C>,
+}
+
+impl<C> Clone for Configurator<C> {
+	fn clone(&self) -> Self {
+		Self {
+			inner: self.inner.clone(),
+		}
+	}
 }
 
 impl<C> Configurator<C> {
