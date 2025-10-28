@@ -63,6 +63,11 @@ impl<P> Sender<P> {
 	pub fn is_closed(&self) -> bool {
 		self.inner.is_closed()
 	}
+
+	/// Wait until the sender is closed.
+	pub async fn closed(&self) {
+		self.inner.closed().await
+	}
 }
 
 impl<P> Clone for Sender<P> {

@@ -158,6 +158,11 @@ impl<P> Connection<P> {
 		self.sender.request_receiver(packet).await
 	}
 
+	/// Wait until the connection is closed.
+	pub async fn closed(&mut self) {
+		self.task.closed().await
+	}
+
 	pub async fn close(self) -> Result<(), TaskError> {
 		self.task.close().await
 	}

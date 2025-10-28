@@ -177,6 +177,11 @@ impl<P> Connection<P> {
 	// 	self.sender.create_stream(packet).await
 	// }
 
+	/// Wait until the connection is closed.
+	pub async fn closed(&mut self) {
+		self.task.closed().await
+	}
+
 	/// Wait until the connection has nothing more todo which will then close
 	/// the connection.
 	pub async fn wait(self) -> Result<(), TaskError> {

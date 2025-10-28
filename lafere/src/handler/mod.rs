@@ -31,6 +31,11 @@ pub(crate) struct TaskHandle {
 }
 
 impl TaskHandle {
+	/// Wait until the connection is closed.
+	pub async fn closed(&mut self) {
+		self.close.closed().await;
+	}
+
 	/// Wait until the connection has nothing more todo which will then close
 	/// the connection.
 	pub async fn wait(self) -> Result<(), TaskError> {
