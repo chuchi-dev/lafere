@@ -561,7 +561,7 @@ macro_rules! impl_floats {
 				_is_field: bool
 			) -> Result<(), DecodeError> {
 				let num = kind.$src()?;
-				*self = num as $ty;
+				*self = <$ty>::from_bits(num);
 
 				Ok(())
 			}

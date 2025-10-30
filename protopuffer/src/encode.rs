@@ -1043,7 +1043,7 @@ macro_rules! impl_floats {
 					builder.write_tag(field.num, Self::WIRE_TYPE);
 				}
 
-				builder.$src(**self as $wty);
+				builder.$src((**self).to_bits());
 
 				Ok(())
 			}
@@ -1058,7 +1058,7 @@ macro_rules! impl_floats {
 					encoder.write_tag(field.num, Self::WIRE_TYPE)?;
 				}
 
-				encoder.$src(**self as $wty)
+				encoder.$src((**self).to_bits())
 			}
 		}
 	)*)
