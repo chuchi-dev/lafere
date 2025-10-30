@@ -1,7 +1,7 @@
 [package]
 name = "protopuffer"
 description = "Rust only protobuf implementation"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Sören meier <info@soerenmeier.ch>"]
 repository = "https://github.com/chuchi-dev/lafere"
 edition = "2021"
